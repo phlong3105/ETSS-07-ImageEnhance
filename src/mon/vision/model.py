@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Base Vision Model.
-
-This module implements the base class for all vision models.
-"""
-
-from __future__ import annotations
+"""Implements base class for all vision models."""
 
 __all__ = [
     "VisionModel",
@@ -14,118 +9,86 @@ __all__ = [
 
 from abc import ABC
 from copy import deepcopy
-from typing import Sequence
 
 import torch
-from fvcore.nn import parameter_count
 
 from mon import core, nn
+from mon.nn import _size_2_t
 
-console = core.console
 
-
-# region Model
-
+# ----- Base Model -----
 class VisionModel(nn.Model, ABC):
-    """The base class for all vision models, i.e., image or video as the
-    primary input.
-    """
+    """Base class for vision models with image/video input."""
     
-    # region Initialize Model
-    
-    def compute_efficiency_score(
-        self,
-        image_size: int | Sequence[int] = 512,
-        channels  : int  = 3,
-        runs      : int  = 100,
-        verbose   : bool = False,
-    ) -> tuple[float, float, float]:
-        """Compute the efficiency score of the model, including FLOPs, number
-        of parameters, and runtime.
+    # ----- Initialize -----
+    def compute_efficiency_score(self, image_size: _size_2_t = 512, channels: int = 3) -> tuple[float, float]:
+        """Compute model efficiency score (FLOPs, params).
+
+        Args:
+            image_size: Input size as ``int`` or [H, W]. Default is ``512``.
+            channels: Number of input channels as ``int``. Default is ``3``.
+
+        Returns:
+            Tuple of (FLOPs, parameter count) as ``float`` values.
         """
-        # Define input tensor
-        h, w      = core.get_image_size(image_size)
+        from fvcore.nn import parameter_count
+        from mon import vision
+        
+        h, w      = vision.image_size(image_size)
         datapoint = {"image": torch.rand(1, channels, h, w).to(self.device)}
+        flops, params = core.thop.custom_profile(deepcopy(self), inputs=datapoint, verbose=False)
+        params        = self.params if hasattr(self, "params") and params == 0 else params
+        params        = parameter_count(self) if hasattr(self, "params")  else params
+        params        = sum(params.values())  if isinstance(params, dict) else params
+        return flops, params
         
-        # Get FLOPs and Params
-        flops, params = core.custom_profile(deepcopy(self), inputs=datapoint, verbose=verbose)
-        params = self.params                if hasattr(self, "params") and params == 0 else params
-        params = parameter_count(self)      if hasattr(self, "params")  else params
-        params = sum(list(params.values())) if isinstance(params, dict) else params
-        
-        # Get time
-        timer = core.Timer()
-        for i in range(runs):
-            timer.tick()
-            _ = self(datapoint)
-            timer.tock()
-        avg_time = timer.avg_time
-        
-        # Print
-        if verbose:
-            console.log(f"FLOPs (G) : {flops:.4f}")
-            console.log(f"Params (M): {params:.4f}")
-            console.log(f"Time (s)  : {avg_time:.17f}")
-        
-        return flops, params, avg_time
-        
-    # endregion
-    
-    # region Predicting
-    
+    # ----- Predict -----
     def infer(
         self,
         datapoint : dict,
-        image_size: int | Sequence[int] = 512,
+        image_size: _size_2_t = 512,
         resize    : bool = False,
         *args, **kwargs
     ) -> dict:
-        """Infer the model on a single datapoint. This method is different from
-        :obj:`forward()` in term that you may want to perform additional
-        pre-processing or post-processing steps.
-        
-        Notes:
-            If you want to perform specific pre-processing or post-processing
-            steps, you should override this method.
-        
+        """Infers model output with optional processing.
+    
         Args:
-            datapoint: A :obj:`dict` containing the attributes of a datapoint.
-            image_size: The input size. Default: ``512``.
-            resize: Resize the input image to the model's input size.
-                Default: ``False``.
+            datapoint: ``dict`` with datapoint attributes.
+            image_size: Input size as ``int`` or [H, W]. Default is ``512``.
+            resize: Resize input to ``image_size`` if ``True``. Default is ``False``.
+    
+        Returns:
+            ``dict`` of model predictions with inference time.
+    
+        Notes:
+            Override for custom pre/post-processing; defaults to ``self.forward()``.
         """
-        # Pre-processing
-        self.assert_datapoint(datapoint)
-        image  = datapoint.get("image")
-        h0, w0 = core.get_image_size(image)
+        from mon.vision import types, transforms
+        
+        # Input
+        image  = datapoint["image"]
+        h0, w0 = types.image_size(image)
         for k, v in datapoint.items():
-            if core.is_image(v):
-                if resize:
-                    datapoint[k] = core.resize(v, image_size)
-                else:
-                    datapoint[k] = core.resize(v, divisible_by=32)
-        for k, v in datapoint.items():
+            if types.is_image(v):
+                size         = image_size if resize else 32 * ((max(h0, w0) + 31) // 32)
+                datapoint[k] = transforms.resize(v, size)
             if isinstance(v, torch.Tensor):
                 datapoint[k] = v.to(self.device)
-                
-        # Forward
+        
+        # Infer
         timer = core.Timer()
         timer.tick()
         outputs = self.forward(datapoint, *args, **kwargs)
         timer.tock()
-        self.assert_outputs(outputs)
-        
+    
         # Post-processing
         for k, v in outputs.items():
-            if core.is_image(v):
-                h1, w1 = core.get_image_size(v)
+            if types.is_image(v):
+                h1, w1 = types.image_size(v)
                 if h1 != h0 or w1 != w0:
-                    outputs[k] = core.resize(v, (h0, w0))
+                    outputs[k] = transforms.resize(v, (h0, w0))
         
         # Return
-        outputs["time"] = timer.avg_time
-        return outputs
-    
-    # endregion
-    
-# endregion
+        return outputs | {
+            "time": timer.avg_time
+        }

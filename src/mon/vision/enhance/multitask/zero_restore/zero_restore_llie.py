@@ -1,29 +1,26 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Zero-Restore
-
-This module implements the paper: Zero-shot Single Image Restoration through
-Controlled Perturbation of Koschmieder's Model.
+"""Implements the paper: "Zero-shot Single Image Restoration through Controlled
+Perturbation of Koschmieder's Model," CVPR 2021.
 
 References:
-    https://github.com/aupendu/zero-restore
+	- https://github.com/aupendu/zero-restore
 """
-
-from __future__ import annotations
 
 __all__ = [
     "ZeroRestoreLLIE",
 ]
 
 import random
-from typing import Any, Literal
+from typing import Literal
 
 import numpy as np
 import torch
 
 from mon import core, nn
-from mon.globals import MODELS, Scheme, Task
+from mon.constants import MLType, MODELS, Task
+from mon.vision import geometry, types
 from mon.vision.enhance import base
 
 torch.manual_seed(1)
@@ -33,35 +30,24 @@ random.seed(1)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark     = False
 
-console      = core.console
 current_file = core.Path(__file__).absolute()
 current_dir  = current_file.parents[0]
 
 
-# region Loss
-
+# ----- Loss -----
 class TotalVariationLoss(nn.Loss):
-    """Total Variation Loss on the Illumination (Illumination Smoothness Loss)
-    `\mathcal{L}_{tvA}` preserve the monotonicity relations between
-    neighboring pixels. It is used to avoid aggressive and sharp changes between
-    neighboring pixels.
+    """Total Variation Loss on the Illumination (Illumination Smoothness Loss) preserve
+    the monotonicity relations between neighboring pixels. It is used to avoid
+    aggressive and sharp changes between neighboring pixels.
     
     References:
-        `<https://github.com/Li-Chongyi/Zero-DCE/blob/master/Zero-DCE_code/Myloss.py>`__
+        - https://github.com/Li-Chongyi/Zero-DCE/blob/master/Zero-DCE_code/Myloss.py
     """
     
-    def __init__(
-        self,
-        loss_weight: float = 1.0,
-        reduction  : Literal["none", "mean", "sum"] = "mean",
-    ):
-        super().__init__(loss_weight=loss_weight, reduction=reduction)
+    def __init__(self, reduction: Literal["none", "mean", "sum"] = "mean"):
+        super().__init__(reduction=reduction)
     
-    def forward(
-        self,
-        input : torch.Tensor,
-        target: torch.Tensor = None
-    ) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, target: torch.Tensor = None) -> torch.Tensor:
         x       = input
         b       = x.size()[0]
         h_x     = x.size()[2]
@@ -71,14 +57,10 @@ class TotalVariationLoss(nn.Loss):
         h_tv    = torch.pow((x[:, :, 1:,  :] - x[:, :, :h_x - 1, :]), 2).sum()
         w_tv    = torch.pow((x[:, :,  :, 1:] - x[:, :, :, :w_x - 1]), 2).sum()
         loss    = (h_tv / count_h + w_tv / count_w) / b
-        loss    = self.loss_weight * loss
         return loss
 
-# endregion
 
-
-# region Module
-
+# ----- Module -----
 class DoubleConv(nn.Module):
     
     def __init__(self, in_channels: int, out_channels: int):
@@ -220,42 +202,40 @@ class Estimation(nn.Module):
         atm   = torch.sigmoid(atm)
         return trans, atm
 
-# endregion
 
-
-# region Model
-
+# ----- Model -----
 @MODELS.register(name="zero_restore_llie", arch="zero_restore")
 class ZeroRestoreLLIE(base.ImageEnhancementModel):
-    """Zero-shot Single Image Restoration through Controlled Perturbation of
-    Koschmieder's Model.
+    """Zero-Restore model for low-light image enhancement.
+    
+    References:
+	    - https://github.com/aupendu/zero-restore
     """
     
-    model_dir: core.Path    = current_dir
     arch     : str          = "zero_restore"
+    name     : str          = "zero_restore_llie"
     tasks    : list[Task]   = [Task.LLIE]
-    schemes  : list[Scheme] = [Scheme.ZERO_REFERENCE]
+    mltypes  : list[MLType] = [MLType.ZERO_SHOT]
+    model_dir: core.Path    = current_dir
     zoo      : dict         = {}
     
     def __init__(
         self,
-        name        : str = "zero_restore_llie",
         in_channels : int = 3,
         num_channels: int = 64,
-        weights     : Any = None,
+        iters       : int = 10000,
         *args, **kwargs
     ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            weights     = weights,
-            *args, **kwargs
-        )
+        super().__init__(*args, **kwargs)
         self.in_channels  = in_channels
         self.num_channels = num_channels
+        self.iters        = iters
         
-        # Construct model
+        # Network
         self.estimation = Estimation(self.num_channels)
+        
+        # Optimizer
+        self.configure_optimizers()
         
         # Load weights
         if self.weights:
@@ -263,22 +243,36 @@ class ZeroRestoreLLIE(base.ImageEnhancementModel):
         else:
             self.apply(self.init_weights)
         self.initial_state_dict = self.state_dict()
-        
+    
+    # ----- Initialize -----
     def init_weights(self, m: nn.Module):
+        """Initializes the model's weights.
+    
+        Args:
+            m: ``nn.Module`` to initialize weights for.
+        """
         classname = m.__class__.__name__
         if classname.find("Conv2d") != -1:  # 0.02
             m.weight.data.normal_(0.0, 0.001)
         if classname.find("Linear") != -1:  # 0.02
             m.weight.data.normal_(0.0, 0.001)
     
+    # ----- Forward Pass -----
     def forward_loss(self, datapoint: dict, *args, **kwargs) -> dict:
+        """Computes forward pass and loss.
+    
+        Args:
+            datapoint: ``dict`` with datapoint attributes.
+    
+        Returns:
+            ``dict`` of predictions with ``"loss"`` and ``"enhanced"`` keys.
+        """
         # Forward 1
-        self.assert_datapoint(datapoint)
-        outputs   = self.forward(datapoint=datapoint, *args, **kwargs)
-        image     = datapoint.get("image")
-        trans_map = outputs["trans"]
-        atm_map   = outputs["atm"]
-        enhanced  = outputs["enhanced"]
+        outputs     = self.forward(datapoint=datapoint, *args, **kwargs)
+        image       = datapoint["image"]
+        trans_map   = outputs["trans"]
+        atm_map     = outputs["atm"]
+        enhanced    = outputs["enhanced"]
         # Forward 2
         p_x         = 0.9
         image_x     = image * p_x + (1 - p_x) * atm_map
@@ -286,6 +280,7 @@ class ZeroRestoreLLIE(base.ImageEnhancementModel):
         trans_map_x = outputs_x["trans"]
         atm_map_x   = outputs_x["atm"]
         enhanced_x  = outputs_x["enhanced"]
+        
         # Loss
         o_tensor  = torch.ones(enhanced.shape).to(self.device)
         z_tensor  = torch.zeros(enhanced.shape).to(self.device)
@@ -301,20 +296,26 @@ class ZeroRestoreLLIE(base.ImageEnhancementModel):
         loss_mn   = loss_mn_r + loss_mn_g + 10 * loss_mn_b
         loss_tv   = nn.TotalVariationLoss()(enhanced)
         loss      = loss_t + loss_a + 0.001 * loss_mx + 0.01 * loss_mn + 0.001 * loss_tv
-        outputs["loss"] = loss
-        # Return
-        return outputs
+
+        return outputs | {
+			"loss": loss,
+		}
         
     def forward(self, datapoint: dict, *args, **kwargs) -> dict:
-        # Prepare input
-        self.assert_datapoint(datapoint)
-        image = datapoint.get("image")
-        # Forward
+        """Performs forward pass of the model.
+    
+        Args:
+            datapoint: ``dict`` with datapoint attributes.
+    
+        Returns:
+            ``dict`` of predictions with ``"enhanced"`` keys.
+        """
+        image      = datapoint["image"]
         trans, atm = self.estimation(image)
         atm        = atm.expand_as(image)
         trans      = trans.expand_as(image)
         enhanced   = (image - (1 - trans) * atm) / trans
-        # Return
+
         return {
             "trans"   : trans,
             "atm"     : atm,
@@ -339,65 +340,53 @@ class ZeroRestoreLLIE(base.ImageEnhancementModel):
             image = image.flip(3)
         return image
     
-    def infer(
-        self,
-        datapoint    : dict,
-        epochs       : int   = 1000,
-        lr           : float = 1e-3,
-        weight_decay : float = 1e-2,
-        reset_weights: bool  = True,
-        *args, **kwargs
-    ) -> dict:
+    # ----- Predict -----
+    def infer(self, datapoint: dict, reset_weights: bool = True, *args, **kwargs) -> dict:
+        """Infers model output with optional processing.
+    
+        Args:
+            datapoint: ``dict`` with datapoint attributes.
+            reset_weights: Whether to reset the weights before training. Default is ``True``.
+            
+        Returns:
+            ``dict`` of model predictions.
+    
+        Notes:
+            Override for custom pre/post-processing; defaults to ``self.forward()``.
+        """
         # Initialize training components
-        self.train()
         if reset_weights:
-            self.load_state_dict(self.initial_state_dict)
-        if isinstance(self.optims, dict):
-            optimizer = self.optims.get("optimizer", None)
-        else:
-            optimizer = nn.Adam(
-                self.parameters(),
-                lr           = lr,
-                betas        = (0.9, 0.999),
-                eps          = 1e-8,
-                weight_decay = weight_decay,
-            )
+            self.load_state_dict(self.initial_state_dict, strict=False)
+        optimizer = self.optimizer.get("optimizer", None)
+        optimizer = optimizer or nn.Adam(self, lr=1e-3, weight_decay=1e-2)
         
-        # Pre-processing
-        self.assert_datapoint(datapoint)
-        for k, v in datapoint.items():
-            if isinstance(v, torch.Tensor):
-                datapoint[k] = v.to(self.device)
-        image = datapoint.get("image")
-        image = core.resize(image, divisible_by=32)
+        # Input
+        image  = datapoint["image"].to(self.device)
+        h0, w0 = types.image_size(image)
+        image  = geometry.resize(image, divisible_by=32)
         
-        # Training
-        for _ in range(epochs):
-            image   = self.augment(image)
-            outputs = self.forward_loss(datapoint={"image": image})
+        # Optimize
+        timer = core.Timer()
+        timer.tick()
+        self.train()
+        for _ in range(self.iters):
+            image_  = self.augment(image)
+            outputs = self.forward_loss(datapoint={"image": image_})
             optimizer.zero_grad()
             loss = outputs["loss"]
             loss.backward()
             optimizer.step()
-            
-        # Inference
         self.eval()
-        image    = datapoint.get("image")
-        h, w     = core.get_image_size(image)
-        image    = core.resize(image, divisible_by=32)
-        timer    = core.Timer()
-        timer.tick()
-        outputs  = self.forward(datapoint={"image": image})
+        outputs = self.forward(datapoint={"image": image})
         timer.tock()
         
         # Post-processing
         enhanced = outputs["enhanced"]
-        enhanced = core.resize(enhanced, (h, w))
-        outputs["enhanced"] = torch.clamp(enhanced, 0, 1)
-        self.assert_outputs(outputs)
+        enhanced = geometry.resize(enhanced, (h0, w0))
+        enhanced = torch.clamp(enhanced, 0, 1)
         
         # Return
-        outputs["time"] = timer.avg_time
-        return outputs
-    
-# endregion
+        return outputs | {
+            "enhanced": enhanced,
+            "time"    : timer.avg_time,
+        }

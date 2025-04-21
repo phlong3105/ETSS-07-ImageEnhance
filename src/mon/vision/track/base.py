@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""This module implements the base classes for tracks and trackers."""
-
-from __future__ import annotations
+"""Implements base classes for tracks and trackers."""
 
 __all__ = [
     "Detection",
@@ -16,10 +14,8 @@ from timeit import default_timer as timer
 
 import numpy as np
 
-from mon import core
-from mon.globals import TrackState
-
-console = core.console
+from mon.core import TrackState
+from mon.vision import types
 
 
 # region Track
@@ -44,9 +40,9 @@ class Detection:
         class_id  : int,
         bbox      : np.ndarray,
         confidence: float,
-        polygon   : np.ndarray | None = None,
-        feature   : np.ndarray | None = None,
-        timestamp : int | float       = timer(),
+        polygon   : np.ndarray  = None,
+        feature   : np.ndarray  = None,
+        timestamp : int | float = timer(),
     ):
         self.frame_id   = frame_id
         self.class_id   = class_id
@@ -58,21 +54,18 @@ class Detection:
     
     @classmethod
     def from_value(cls, value: Detection | dict) -> Detection:
-        """Create a :obj:`BBoxAnnotation` object from an arbitrary :obj:`value`.
+        """Create a `BBoxAnnotation` object from an arbitrary `value`.
         """
         if isinstance(value, dict):
             return Detection(**value)
         elif isinstance(value, Detection):
             return value
         else:
-            raise ValueError(
-                f"`value` must be a `Detection` class or "
-                f"a `dict`, but got {type(value)}."
-            )
+            raise ValueError(f"`value` must be a `Detection` class or a `dict`, got {type(value)}.")
     
     @property
     def bbox(self) -> np.ndarray:
-        """Return the bounding box of shape `[4]`."""
+        """Return the bounding box of shape [4]."""
         return self._bbox
     
     @bbox.setter
@@ -81,11 +74,11 @@ class Detection:
         if bbox.ndim == 1 and bbox.size == 4:
             self._bbox = bbox
         else:
-            raise ValueError(f"`bbox` must be a 1D array of size 4, but got {bbox.ndim} and {bbox.size}.")
+            raise ValueError(f"`bbox` must be a 1D array of size ``4``, got {bbox.ndim} and {bbox.size}.")
     
     @property
     def bbox_center(self) -> np.ndarray:
-        return core.bbox_center(bbox=self.bbox)[0]
+        return types.bbox_center(bbox=self.bbox)[0]
     
     @property
     def bbox_tl(self) -> np.ndarray:
@@ -94,7 +87,7 @@ class Detection:
     
     @property
     def bbox_corners_points(self) -> np.ndarray:
-        return core.bbox_corners_points(bbox=self.bbox)[0]
+        return types.bbox_corners_pts(bbox=self.bbox)[0]
     
     @property
     def confidence(self) -> float:
@@ -103,9 +96,9 @@ class Detection:
     
     @confidence.setter
     def confidence(self, confidence: float):
-            if not 0.0 <= confidence <= 1.0:
-                raise ValueError(f"`confidence` must be between ``0.0`` and ``1.0``, but got {confidence}.")
-            self._confidence = confidence
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError(f"`confidence` must be between ``0.0`` and ``1.0``, got {confidence}.")
+        self._confidence = confidence
     
 
 class Track(ABC):
@@ -121,23 +114,22 @@ class Track(ABC):
     
     Args:
         id_: The unique ID of the track. Default: ``None``.
-        state: The state of the track. Default: :obj:`TrackState.NEW`.
-        detections: The list of detections associated with the track.
-            Default: ``[]``.
+        state: The state of the track. Default: `TrackState.NEW`.
+        detections: The list of detections associated with the track. Default: [].
     """
     
     count: int = 0
     
     def __init__(
         self,
-        id_       : int | None = None,
+        id_       : int        = None,
         state     : TrackState = TrackState.NEW,
         detections: Detection | list[Detection] = [],
     ):
-        self.id_     = id_ or Track.count
-        self.state   = state
-        self.history = detections
-        Track.count += 1
+        self.id_      = id_ or Track.count
+        self.state    = state
+        self.history  = detections
+        Track.count  += 1
     
     @property
     def history(self) -> list[Detection]:
@@ -148,7 +140,7 @@ class Track(ABC):
     def history(self, detections: Detection | list[Detection]):
         detections = [detections] if not isinstance(detections, list) else detections
         if not all(isinstance(d, Detection) for d in detections):
-            raise ValueError(f"`detections` must be a `list` of `Detection`, but got {type(detections)}.")
+            raise ValueError(f"`detections` must be a `list` of `Detection`, got {type(detections)}.")
         self._history = detections
     
     @staticmethod
@@ -168,7 +160,7 @@ class Track(ABC):
         """Predict the next state of the tracking object."""
         pass
         
-# endregion
+
 
 
 # region Tracker
@@ -183,5 +175,3 @@ class Tracker(ABC):
     @abstractmethod
     def update(self, *args, **kwargs):
         pass
-
-# endregion

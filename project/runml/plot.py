@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""This module implements visual comparison pipeline."""
-
-from __future__ import annotations
+"""Implements visual comparison pipeline."""
 
 import math
 
@@ -13,8 +11,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import mon
-
-console = mon.console
 
 plt.rcParams["savefig.bbox"] = "tight"
 
@@ -97,7 +93,7 @@ def list_images(input_dir: mon.Path, verbose: bool):
         "input"       : "",
         "ground-truth": "",
     }
-    with mon.get_progress_bar() as pbar:
+    with mon.create_progress_bar() as pbar:
         for sd in pbar.track(
             sequence    = subdirs,
             total       = len(subdirs),
@@ -115,12 +111,12 @@ def list_images(input_dir: mon.Path, verbose: bool):
                     dataset_names.append(dataset_dir.name)
     dataset_names = sorted(dataset_names)
     if verbose:
-        console.log(list(image_grid.keys()))
-        console.log(dataset_names)
+        mon.console.log(list(image_grid.keys()))
+        mon.console.log(dataset_names)
     
     # Listing image names
     image_stem_dict = {}
-    with mon.get_progress_bar() as pbar:
+    with mon.create_progress_bar() as pbar:
         for dn in pbar.track(
             sequence    = dataset_names,
             total       = len(dataset_names),
@@ -149,7 +145,7 @@ def plot_cv2(
         output_dir.mkdir(parents=True, exist_ok=True)
     
     # Visualize images
-    with mon.get_progress_bar() as pbar:
+    with mon.create_progress_bar() as pbar:
         for dn in pbar.track(
             sequence    = dataset_names,
             total       = len(dataset_names),
@@ -161,7 +157,7 @@ def plot_cv2(
                 # Read images
                 for k, _ in image_grid.items():
                     path = None
-                    for ext in mon.IMAGE_FILE_FORMATS:
+                    for ext in mon.ImageExtension.values():
                         temp = input_dir / k / dn / f"{image_stem}{ext}"
                         if temp.exists():
                             path = temp
@@ -253,7 +249,7 @@ def plot_cv2_diff(
         output_dir.mkdir(parents=True, exist_ok=True)
     
     # Visualize images
-    with mon.get_progress_bar() as pbar:
+    with mon.create_progress_bar() as pbar:
         for dn in pbar.track(
             sequence    = dataset_names,
             total       = len(dataset_names),
@@ -265,7 +261,7 @@ def plot_cv2_diff(
                 # Read images
                 for k, _ in image_grid.items():
                     path = None
-                    for ext in mon.IMAGE_FILE_FORMATS:
+                    for ext in mon.ImageExtension.values():
                         temp = input_dir / k / dn / f"{image_stem}{ext}"
                         if temp.exists():
                             path = temp
@@ -368,7 +364,7 @@ def plot_matplotlib(
     
     # Visualize images
     first_image = True
-    with mon.get_progress_bar() as pbar:
+    with mon.create_progress_bar() as pbar:
         for dn in pbar.track(
             sequence    = dataset_names,
             total       = len(dataset_names),
@@ -379,7 +375,7 @@ def plot_matplotlib(
                 image_dtype = None
                 for k, _ in image_grid.items():
                     path = None
-                    for ext in mon.IMAGE_FILE_FORMATS:
+                    for ext in mon.ImageExtension.values():
                         temp = input_dir / k / dn / f"{image_stem}{ext}"
                         if temp.exists():
                             path = temp

@@ -1,22 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""RRDNet.
-
-This module implement the paper: Zero-Shot Restoration of Underexposed Images
-via Robust Retinex Decomposition.
+"""Implements the paper: "Zero-Shot Restoration of Underexposed Images via Robust
+Retinex Decomposition," ICME 2020.
 
 References:
-    https://github.com/aaaaangel/RRDNet
+    - https://github.com/aaaaangel/RRDNet
 """
 
-from __future__ import annotations
-
 __all__ = [
-    "RRDNet_RE",
+    "RRDNet",
 ]
 
-from typing import Any, Literal
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -24,21 +20,18 @@ import torch
 from torch.nn import functional as F
 
 from mon import core, nn
-from mon.globals import MODELS, Scheme, Task
+from mon.constants import MLType, MODELS, Task
 from mon.vision.enhance import base
 
-console      = core.console
 current_file = core.Path(__file__).absolute()
 current_dir  = current_file.parents[0]
-LDA          = nn.LayeredFeatureAggregation
 
 bilateral_ksize = (3, 3)
 bilateral_color = 0.1
 bilateral_space = (1.5, 1.5)
 
 
-# region Loss
-
+# ----- Loss -----
 class Loss(nn.Loss):
     
     def __init__(
@@ -49,7 +42,7 @@ class Loss(nn.Loss):
         reduction     : Literal["none", "mean", "sum"] = "mean",
         *args, **kwargs
     ):
-        super().__init__(reduction=reduction, *args, **kwargs)
+        super().__init__(reduction=reduction)
         self.illu_factor    = illu_factor
         self.reflect_factor = reflect_factor
         self.noise_factor   = noise_factor
@@ -175,36 +168,36 @@ class Loss(nn.Loss):
         x      = torch.cat([slice1, slice2, slice3], dim=1)
         return x
 
-# endregion
 
-
-# region Model
-
-@MODELS.register(name="rrdnet_re", arch="rrdnet")
-class RRDNet_RE(base.ImageEnhancementModel):
+# ----- Model -----
+@MODELS.register(name="rrdnet", arch="rrdnet")
+class RRDNet(base.ImageEnhancementModel):
+    """RRDNet model for low-light image enhancement."""
     
-    model_dir: core.Path    = current_dir
     arch     : str          = "rrdnet"
+    name     : str          = "rrdnet"
     tasks    : list[Task]   = [Task.LLIE]
-    schemes  : list[Scheme] = [Scheme.ZERO_REFERENCE, Scheme.INSTANCE]
+    mltypes  : list[MLType] = [MLType.ZERO_SHOT]
+    model_dir: core.Path    = current_dir
     zoo      : dict         = {}
     
     def __init__(
         self,
-        name          : str   = "rrdnet",
         gamma         : float = 0.4,
         illu_factor   : float = 1,
         reflect_factor: float = 1,
         noise_factor  : float = 5000,
-        weights       : Any   = None,
+        iters         : int   = 1000,
         *args, **kwargs
     ):
-        super().__init__(name=name, weights=weights, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.gamma          = gamma
         self.illu_factor    = illu_factor
         self.reflect_factor = reflect_factor
         self.noise_factor   = noise_factor
+        self.iters          = iters
         
+        # Network
         self.illumination_net = nn.Sequential(
             nn.Conv2d(3, 16, 3, 1, 1),
             nn.ReLU(),
@@ -239,12 +232,11 @@ class RRDNet_RE(base.ImageEnhancementModel):
             nn.Conv2d(32, 3, 3, 1, 1)
         )
         
+        # Optimizer
+        self.configure_optimizers()
+        
         # Loss
-        self.loss = Loss(
-            illu_factor    = illu_factor,
-            reflect_factor = reflect_factor,
-            noise_factor   = noise_factor,
-        )
+        self.loss = Loss(illu_factor=illu_factor, reflect_factor=reflect_factor, noise_factor=noise_factor)
         
         # Load weights
         if self.weights:
@@ -253,25 +245,43 @@ class RRDNet_RE(base.ImageEnhancementModel):
             self.apply(self.init_weights)
         self.initial_state_dict = self.state_dict()
     
+    # ----- Initialize -----
     def init_weights(self, m: nn.Module):
+        """Initializes the model's weights.
+    
+        Args:
+            m: ``nn.Module`` to initialize weights for.
+        """
         pass
-        
+    
+    # ----- Forward Pass -----
     def forward_loss(self, datapoint: dict, *args, **kwargs) -> dict:
+        """Computes forward pass and loss.
+    
+        Args:
+            datapoint: ``dict`` with datapoint attributes.
+    
+        Returns:
+            ``dict`` of predictions with ``"loss"`` and ``"enhanced"`` keys.
+        """
         # Forward
-        self.assert_datapoint(datapoint)
-        outputs         = self.forward(datapoint=datapoint, *args, **kwargs)
-        image           = outputs.get("image")
-        illumination    = outputs.get("illumination")
-        reflectance     = outputs.get("reflectance")
-        noise           = outputs.get("noise")
-        loss            = self.loss(image, illumination, reflectance, noise)
-        outputs["loss"] = loss
-        return outputs
+        outputs = self.forward(datapoint=datapoint, *args, **kwargs)
+        
+        # Loss
+        image        = outputs["image"]
+        illumination = outputs["illumination"]
+        reflectance  = outputs["reflectance"]
+        noise        = outputs["noise"]
+        loss         = self.loss(image, illumination, reflectance, noise)
+        
+        return outputs | {
+            "loss": loss,
+        }
         
     def forward(self, datapoint: dict, *args, **kwargs) -> dict:
-        # Prepare input
-        self.assert_datapoint(datapoint)
-        image        = datapoint.get("image")
+        # Input
+        image = datapoint["image"]
+        
         # Enhance
         illumination = torch.sigmoid(self.illumination_net(image))
         reflectance  = torch.sigmoid(self.reflectance_net(image))
@@ -279,7 +289,7 @@ class RRDNet_RE(base.ImageEnhancementModel):
         adjust_illu  = torch.pow(illumination, self.gamma)
         enhanced     = adjust_illu * ((image - noise) / illumination)
         enhanced     = torch.clamp(enhanced, min=0, max=1)
-        # Return
+
         return {
             "image"       : image,
             "illumination": illumination,
@@ -287,49 +297,48 @@ class RRDNet_RE(base.ImageEnhancementModel):
             "noise"       : noise,
             "enhanced"    : enhanced
         }
-       
-    def infer(
-        self,
-        datapoint    : dict,
-        epochs       : int   = 1000,
-        lr           : float = 0.001,
-        reset_weights: bool  = True,
-        *args, **kwargs
-    ) -> dict:
+    
+    # ----- Predict -----
+    def infer(self, datapoint: dict, reset_weights: bool = True, *args, **kwargs) -> dict:
+        """Infers model output with optional processing.
+    
+        Args:
+            datapoint: ``dict`` with datapoint attributes.
+            reset_weights: Whether to reset the weights before training. Default is ``True``.
+            
+        Returns:
+            ``dict`` of model predictions.
+    
+        Notes:
+            Override for custom pre/post-processing; defaults to ``self.forward()``.
+        """
         # Initialize training components
-        self.train()
         if reset_weights:
-            self.load_state_dict(self.initial_state_dict)
-        if isinstance(self.optims, dict):
-            optimizer = self.optims.get("optimizer", None)
-        else:
-            optimizer = nn.Adam(self.parameters(), lr=lr, betas=(0.9, 0.999))
-        
-        # Pre-processing
-        self.assert_datapoint(datapoint)
+            self.load_state_dict(self.initial_state_dict, strict=False)
+        optimizer = self.optimizer.get("optimizer", None)
+        optimizer = optimizer or nn.Adam(self.parameters(), lr=0.001)
+            
+        # Input
         for k, v in datapoint.items():
             if isinstance(v, torch.Tensor):
                 datapoint[k] = v.to(self.device)
         
-        # Training
-        for _ in range(epochs - 1):
+        # Optimize
+        timer = core.Timer()
+        timer.tick()
+        self.train()
+        for _ in range(self.iters):
             outputs = self.forward_loss(datapoint=datapoint)
             self.zero_grad()
             optimizer.zero_grad()
             loss = outputs["loss"]
             loss.backward(retain_graph=True)
             optimizer.step()
-            
-        # Forward
         self.eval()
-        timer = core.Timer()
-        timer.tick()
         outputs = self.forward(datapoint=datapoint)
         timer.tock()
-        self.assert_outputs(outputs)
         
         # Return
-        outputs["time"] = timer.avg_time
-        return outputs
-
-# endregion
+        return outputs | {
+            "time": timer.avg_time,
+        }

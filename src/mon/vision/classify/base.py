@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Base Classification Model.
-
-This module implements the base model class for classification models.
-"""
-
-from __future__ import annotations
+"""Implements base class for classification models."""
 
 __all__ = [
     "ImageClassificationModel",
@@ -15,65 +10,76 @@ __all__ = [
 from abc import ABC
 
 from mon import core, nn
-from mon.globals import Scheme, Task
-from mon.vision.model import VisionModel
-
-console = core.console
+from mon.constants import Task
+from mon.vision import model
 
 
-# region Model
+# ----- Classification Model -----
+class ImageClassificationModel(model.VisionModel, ABC):
+    """Base class for image classification models."""
 
-class ImageClassificationModel(VisionModel, ABC):
-    """The base class for all image classification models."""
-    
     tasks: list[Task] = [Task.CLASSIFY]
     
-    def assert_datapoint(self, datapoint: dict) -> bool:
-        if "image" not in datapoint:
-            raise ValueError(f"The key ``'image'`` must be defined in the "
-                             f"`datapoint`.")
+    # ----- Initialize -----
+    def parse_num_classes(self, num_classes: int) -> int:
+        """Updates num_classes from pretrained weights if needed.
+
+        Args:
+            num_classes: Initial number of classes.
         
-        has_target = any(item in self.schemes for item in [Scheme.SUPERVISED]) and not self.predicting
-        if has_target:
-            if "class_id" not in datapoint:
-                raise ValueError(f"The key ``'class_id'`` must be defined in "
-                                 f"the `datapoint`.")
-            
-    def assert_outputs(self, outputs: dict) -> bool:
-        if "logits" not in outputs:
-            raise ValueError(f"The key ``'logits'`` must be defined in the "
-                             f"`outputs`.")
+        Returns:
+            Updated number of classes.
+        """
+        if isinstance(self.weights, dict):
+            num_classes_ = self.weights.get("num_classes", None)
+            if num_classes_ and num_classes_ != num_classes:
+                num_classes = num_classes_
+                core.console.log(f"Overriding num_classes from {num_classes} to {num_classes_}")
+        return num_classes
     
+    # ----- Forward Pass -----
     def forward_loss(self, datapoint: dict, *args, **kwargs) -> dict:
-        # Forward
-        self.assert_datapoint(datapoint)
-        outputs = self.forward(datapoint=datapoint, *args, **kwargs)
-        self.assert_outputs(outputs)
-        # Loss
-        pred    = outputs.get("logits")
-        target  = datapoint.get("class_id")
-        outputs["loss"] = self.loss(pred, target) if self.loss else None
-        # Return
-        return outputs
+        """Computes forward pass and loss.
     
+        Args:
+            datapoint: ``dict`` with datapoint attributes.
+    
+        Returns:
+            ``dict`` of predictions with ``"loss"`` and ``"logits"`` keys.
+        """
+        # Forward
+        outputs = self.forward(datapoint=datapoint, *args, **kwargs)
+        
+        # Loss
+        pred    = outputs["logits"]
+        target  = datapoint["class_id"]
+        loss    = self.loss(pred, target) if self.loss else None
+        
+        return outputs | {
+            "loss": loss,
+        }
+
     def compute_metrics(
         self,
         datapoint: dict,
         outputs  : dict,
         metrics  : list[nn.Metric] = None
     ) -> dict:
-        # Check
-        self.assert_datapoint(datapoint)
-        self.assert_outputs(outputs)
-        # Metrics
-        pred    = outputs.get("logits")
-        target  = datapoint.get("class_id")
+        """Computes metrics for given predictions.
+    
+        Args:
+            datapoint: ``dict`` with datapoint attributes.
+            outputs: ``dict`` with model predictions.
+            metrics: ``list`` of ``M.Metric`` or ``None``. Default is ``None``.
+    
+        Returns:
+            ``dict`` of computed metric values.
+        """
+        pred    = outputs["logits"]
+        target  = datapoint["class_id"]
         results = {}
-        if metrics is not None:
+        if metrics:
             for i, metric in enumerate(metrics):
                 metric_name = getattr(metric, "name", f"metric_{i}")
                 results[metric_name] = metric(pred, target)
-        # Return
         return results
-    
-# endregion

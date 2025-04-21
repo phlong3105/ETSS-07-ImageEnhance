@@ -7,36 +7,29 @@ This module implements our idea: "Guided Curve Estimation Network for Low-Light
 Image Enhancement".
 """
 
-from __future__ import annotations
-
 __all__ = [
     "GCENet",
     "GCENet_ZSN2N",
-    "GCENet_Instance",
 ]
 
 from copy import deepcopy
-from typing import Any, Literal
+from typing import Literal
 
+import kornia
 import torch
 from fvcore.nn import parameter_count
-from torch.nn.common_types import _size_2_t
 
 from mon import core, nn
-from mon.globals import MODELS, Scheme, Task
-from mon.nn import init
-from mon.vision import filtering
+from mon.constants import MLType, MODELS, Task
+from mon.nn import _size_2_t, init
+from mon.vision import filtering, geometry, types
 from mon.vision.enhance import base
 
-console      = core.console
 current_file = core.Path(__file__).absolute()
 current_dir  = current_file.parents[0]
 
-DepthBoundaryAware = nn.BoundaryAwarePrior
 
-
-# region Loss
-
+# ----- Loss -----
 class Loss(nn.Loss):
     
     def __init__(
@@ -80,7 +73,7 @@ class Loss(nn.Loss):
         loss_col = self.loss_col(input=enhance)               if self.weight_col  > 0 else 0
         loss_exp = self.loss_exp(input=enhance)               if self.weight_exp  > 0 else 0
         loss_spa = self.loss_spa(input=enhance, target=input) if self.weight_spa  > 0 else 0
-        if adjust is not None:
+        if adjust:
             loss_tva = self.loss_tva(input=adjust)  if self.weight_tva > 0 else 0
         else:
             loss_tva = self.loss_tva(input=enhance) if self.weight_tva > 0 else 0
@@ -92,19 +85,16 @@ class Loss(nn.Loss):
         )
         return loss
         
-# endregion
 
-
-# region Module
-
+# ----- Module -----
 class LRNet(nn.Module):
     
     def __init__(
         self,
-        in_channels : int   = 3,
-        mid_channels: int   = 24,
-        layers      : int   = 5,
-        relu_slope  : float = 0.2,
+        in_channels : int       = 3,
+        mid_channels: int       = 24,
+        layers      : int       = 5,
+        relu_slope  : float     = 0.2,
         norm        : nn.Module = nn.AdaptiveBatchNorm2d,
     ):
         super().__init__()
@@ -156,10 +146,10 @@ class GuidedMap(nn.Module):
     
     def __init__(
         self,
-        in_channels: int   = 3,
-        channels   : int   = 64,
-        dilation   : int   = 0,
-        relu_slope : float = 0.2,
+        in_channels: int       = 3,
+        channels   : int       = 64,
+        dilation   : int       = 0,
+        relu_slope : float     = 0.2,
         norm       : nn.Module = nn.AdaptiveBatchNorm2d,
     ):
         super().__init__()
@@ -206,8 +196,8 @@ class ConvBlock(nn.Module):
         self,
         in_channels  : int,
         out_channels : int,
-        relu_slope   : float = 0.2,
-        is_last_layer: bool  = False,
+        relu_slope   : float     = 0.2,
+        is_last_layer: bool      = False,
         norm         : nn.Module = nn.AdaptiveBatchNorm2d,
     ):
         super().__init__()
@@ -240,9 +230,9 @@ class EnhanceNet(nn.Module):
         num_channels: int,
         num_iters   : int,
         norm        : nn.Module = nn.AdaptiveBatchNorm2d,
-        eps         : float = 0.05,
-        use_depth   : bool  = False,
-        use_edge    : bool  = False,
+        eps         : float     = 0.05,
+        use_depth   : bool      = False,
+        use_edge    : bool      = False,
     ):
         super().__init__()
         self.use_depth     = use_depth
@@ -253,7 +243,7 @@ class EnhanceNet(nn.Module):
         self.num_channels  = num_channels
         self.out_channels  = 3
         # Depth Boundary Aware
-        self.dba     = DepthBoundaryAware(eps=eps, normalized=False)
+        self.dba     = types.BoundaryAwarePrior(eps=eps, normalized=False)
         # Encoder
         self.e_conv1 = ConvBlock(self.in_channels,  self.num_channels, norm=norm)
         self.e_conv2 = ConvBlock(self.num_channels, self.num_channels, norm=norm)
@@ -286,14 +276,14 @@ class EnhanceNet(nn.Module):
         depth: torch.Tensor = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         x    = image
-        gray = core.rgb_to_grayscale(image)
+        gray = kornia.color.rgb_to_grayscale(image)
         edge = None
-        if depth is not None and core.is_color_image(depth):
-            depth = core.rgb_to_grayscale(depth)
+        if depth and types.is_image_colored(depth):
+            depth = kornia.color.rgb_to_grayscale(depth)
         if self.use_depth:
             x = torch.cat([x, depth], 1)
         if self.use_edge:
-            if depth is not None:
+            if depth:
                 edge = self.dba(depth)
             else:
                 edge = self.dba(gray)
@@ -330,24 +320,21 @@ class DenoiseNet(nn.Module):
         y = self.conv3(x)
         return y
 
-# endregion
 
-
-# region Model
-
+# ----- Model -----
 @MODELS.register(name="gcenet", arch="gcenet")
 class GCENet(base.ImageEnhancementModel):
     """Guided Curve Estimation Network for Low-Light Image Enhancement."""
     
-    model_dir: core.Path    = current_dir
     arch     : str          = "gcenet"
+    name     : str          = "gcenet"
     tasks    : list[Task]   = [Task.LLIE]
-    schemes  : list[Scheme] = [Scheme.UNSUPERVISED, Scheme.ZERO_REFERENCE]
+    mltypes  : list[MLType] = [MLType.ZERO_REFERENCE]
+    model_dir: core.Path    = current_dir
     zoo      : dict         = {}
     
     def __init__(
         self,
-        name        : str   = "gcenet",
         in_channels : int   = 3,
         num_channels: int   = 32,
         num_iters   : int   = 15,
@@ -358,15 +345,9 @@ class GCENet(base.ImageEnhancementModel):
         bam_ksize   : int   = 9,
         use_depth   : bool  = True,
         use_edge    : bool  = True,
-        weights     : Any   = None,
         *args, **kwargs
     ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            weights     = weights,
-            *args, **kwargs
-        )
+        super().__init__(*args, **kwargs)
         self.in_channels  = in_channels
         self.num_channels = num_channels
         self.num_iters    = num_iters
@@ -389,7 +370,7 @@ class GCENet(base.ImageEnhancementModel):
             use_edge     = self.use_edge,
         )
         self.gf  = filtering.GuidedFilter(radius=self.gf_radius, eps=self.gf_eps)
-        self.bam = nn.BrightnessAttentionMap(gamma=self.bam_gamma, denoise_ksize=self.bam_ksize)
+        self.bam = types.BrightnessAttentionMap(gamma=self.bam_gamma, denoise_ksize=self.bam_ksize)
         
         # Loss
         self.loss = Loss(reduction="mean")
@@ -403,52 +384,29 @@ class GCENet(base.ImageEnhancementModel):
     def init_weights(self, m: nn.Module):
         pass
     
-    def compute_efficiency_score(
-        self,
-        image_size: _size_2_t = 512,
-        channels  : int       = 3,
-        runs      : int       = 1000,
-        verbose   : bool      = False,
-    ) -> tuple[float, float, float]:
+    def compute_efficiency_score(self, image_size: _size_2_t = 512, channels: int  = 3) -> tuple[float, float]:
         """Compute the efficiency score of the model, including FLOPs, number
         of parameters, and runtime.
         """
         # Define input tensor
-        h, w      = core.get_image_size(image_size)
+        h, w      = types.image_size(image_size)
         datapoint = {
             "image": torch.rand(1, channels, h, w).to(self.device),
             "depth": torch.rand(1,        1, h, w).to(self.device)
         }
         
         # Get FLOPs and Params
-        flops, params = core.custom_profile(deepcopy(self), inputs=datapoint, verbose=verbose)
-        # flops         = FlopCountAnalysis(self, datapoint).total() if flops == 0 else flops
+        flops, params = core.thop.custom_profile(deepcopy(self), inputs=datapoint, verbose=False)
         params        = self.params                if hasattr(self, "params") and params == 0 else params
         params        = parameter_count(self)      if hasattr(self, "params")  else params
         params        = sum(list(params.values())) if isinstance(params, dict) else params
-        
-        # Get time
-        timer = core.Timer()
-        for i in range(runs):
-            timer.tick()
-            _ = self(datapoint)
-            timer.tock()
-        avg_time = timer.avg_time
-        
-        # Print
-        if verbose:
-            console.log(f"FLOPs (G) : {flops:.4f}")
-            console.log(f"Params (M): {params:.4f}")
-            console.log(f"Time (s)  : {avg_time:.17f}")
-        
-        return flops, params, avg_time
+
+        return flops, params
     
     def forward_loss(self, datapoint: dict, *args, **kwargs) -> dict:
         # Forward
-        self.assert_datapoint(datapoint)
-        image    = datapoint.get("image")
+        image    = datapoint["image"]
         outputs  = self.forward(datapoint=datapoint,  *args, **kwargs)
-        self.assert_outputs(outputs)
         # Symmetric Loss
         adjust   = outputs["adjust"]
         enhanced = outputs["enhanced"]
@@ -459,12 +417,11 @@ class GCENet(base.ImageEnhancementModel):
         
     def forward(self, datapoint: dict, *args, **kwargs) -> dict:
         # Prepare input
-        self.assert_datapoint(datapoint)
-        image = datapoint.get("image")
-        depth = datapoint.get("depth")
+        image = datapoint["image"]
+        depth = datapoint["depth"]
         # Enhancement
         adjust, edge = self.en(image, depth)
-        edge  = edge.detach() if edge is not None else None  # Must call detach() else error
+        edge  = edge.detach() if edge else None  # Must call detach() else error
         # Enhancement loop
         if self.bam_gamma in [None, 0.0]:
             enhanced = image
@@ -509,23 +466,21 @@ class GCENet_ZSN2N(GCENet):
     
     def forward_loss(self, datapoint: dict, *args, **kwargs) -> dict:
         # Forward
-        self.assert_datapoint(datapoint)
-        image          = datapoint.get("image")
-        depth          = datapoint.get("depth")
-        image1, image2 = core.pair_downsample(image)
-        depth1, depth2 = core.pair_downsample(depth)
+        image          = datapoint["image"]
+        depth          = datapoint["depth"]
+        image1, image2 = geometry.pair_downsample(image)
+        depth1, depth2 = geometry.pair_downsample(depth)
         datapoint1     = datapoint | {"image": image1, "depth": depth1}
         datapoint2     = datapoint | {"image": image2, "depth": depth2}
         outputs1       = self.forward(datapoint=datapoint1, *args, **kwargs)
         outputs2       = self.forward(datapoint=datapoint2, *args, **kwargs)
         outputs        = self.forward(datapoint=datapoint,  *args, **kwargs)
-        self.assert_outputs(outputs)
         # Symmetric Loss
         enhanced1 = outputs1["enhanced"]
         enhanced2 = outputs2["enhanced"]
         adjust    =  outputs["adjust"]
         enhanced  =  outputs["enhanced"]
-        enhanced_1, enhanced_2 = core.pair_downsample(enhanced)
+        enhanced_1, enhanced_2 = geometry.pair_downsample(enhanced)
         mse_loss = nn.MSELoss()
         loss_res = 0.5 * (mse_loss(image1,     enhanced2) + mse_loss(image2,     enhanced1))
         loss_con = 0.5 * (mse_loss(enhanced_1, enhanced1) + mse_loss(enhanced_2, enhanced2))
@@ -534,64 +489,3 @@ class GCENet_ZSN2N(GCENet):
         outputs["loss"] = loss
         # Return
         return outputs
-
-
-@MODELS.register(name="gcenet_instance", arch="gcenet")
-class GCENet_Instance(GCENet):
-    
-    schemes: list[Scheme] = [Scheme.ZERO_REFERENCE, Scheme.INSTANCE]
-    
-    def __init__(self, name: str = "gcenet_instance", *args, **kwargs):
-        super().__init__(name=name, *args, **kwargs)
-        self.initial_state_dict = self.state_dict()
-        
-    def infer(
-        self,
-        datapoint    : dict,
-        epochs       : int   = 300,
-        lr           : float = 0.00005,
-        weight_decay : float = 0.00001,
-        reset_weights: bool  = True,
-        *args, **kwargs
-    ) -> dict:
-        # Initialize training components
-        self.train()
-        if reset_weights:
-            self.load_state_dict(self.initial_state_dict)
-        if isinstance(self.optims, dict):
-            optimizer = self.optims.get("optimizer", None)
-        else:
-            optimizer = nn.Adam(
-                self.parameters(),
-                lr           = lr,
-                betas        = (0.9, 0.999),
-                weight_decay = weight_decay,
-            )
-        
-        # Pre-processing
-        self.assert_datapoint(datapoint)
-        for k, v in datapoint.items():
-            if isinstance(v, torch.Tensor):
-                datapoint[k] = v.to(self.device)
-        
-        # Training
-        for _ in range(epochs):
-            outputs = self.forward_loss(datapoint=datapoint)
-            optimizer.zero_grad()
-            loss = outputs["loss"]
-            loss.backward(retain_graph=True)
-            optimizer.step()
-            
-        # Forward
-        self.eval()
-        timer = core.Timer()
-        timer.tick()
-        outputs = self.forward(datapoint=datapoint)
-        timer.tock()
-        self.assert_outputs(outputs)
-    
-        # Return
-        outputs["time"] = timer.avg_time
-        return outputs
-
-# endregion

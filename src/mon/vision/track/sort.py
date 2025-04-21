@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""This module implements the SORT: A Simple, Online and Realtime Tracker."""
-
-from __future__ import annotations
+"""Implements SORT: Simple, Online, Realtime Tracker."""
 
 __all__ = [
     "KalmanBoxTrack",
@@ -17,10 +15,9 @@ import torch
 from filterpy.kalman import KalmanFilter
 
 from mon import core
-from mon.globals import TrackState
+from mon.nn import _size_2_t
+from mon.vision import types
 from mon.vision.track import base
-
-console = core.console
 
 
 # region Matching
@@ -37,8 +34,8 @@ def linear_assignment(cost_matrix):
 
 
 def convert_bbox_to_z(bbox: np.ndarray) -> np.ndarray:
-    """Convert a bounding box in the form of `[x1, y1, x2, y2]` and
-    returns ``z`` in the form `[x, y, s, r]` where ``x``, ``y`` is the
+    """Convert a bounding box in the form of ``[x1, y1, x2, y2]`` and
+    returns ``z`` in the form ``[x, y, s, r]`` where ``x``, ``y`` is the
     centre of the box and ``s`` is the scale/area and ``r`` is the aspect ratio.
     """
     w = bbox[2] - bbox[0]
@@ -50,9 +47,9 @@ def convert_bbox_to_z(bbox: np.ndarray) -> np.ndarray:
     return np.array([x, y, s, r]).reshape((4, 1))
 
 
-def convert_x_to_bbox(x: np.ndarray, score: float | None = None) -> np.ndarray:
-    """Convert a bounding box in the centre form of `[x, y, s, r]` and
-    returns it in the form of `[x1, y1, x2, y2]` where ``x1``, ``y1`` is
+def convert_x_to_bbox(x: np.ndarray, score: float = None) -> np.ndarray:
+    """Convert a bounding box in the centre form of ``[x, y, s, r]`` and
+    returns it in the form of ``[x1, y1, x2, y2]`` where ``x1``, ``y1`` is
     the top left and ``x2``, ``y2`` is the bottom right.
     """
     w = np.sqrt(x[2] * x[3])
@@ -77,9 +74,9 @@ def associate_detections_to_tracks(
     
     # iou_matrix = iou_batch(detections, tracks)
     if association == "giou":
-        iou_matrix = core.bbox_giou(detections, tracks)
+        iou_matrix = types.bbox_giou(detections, tracks)
     else:
-        iou_matrix = core.bbox_iou(detections, tracks)
+        iou_matrix = types.bbox_iou(detections, tracks)
     
     if min(iou_matrix.shape) > 0:
         a = (iou_matrix > iou_threshold).astype(np.int32)
@@ -115,7 +112,7 @@ def associate_detections_to_tracks(
     
     return matches, np.array(unmatched_detections), np.array(unmatched_tracks)
 
-# endregion
+
 
 
 # region Track
@@ -128,8 +125,8 @@ class KalmanBoxTrack(base.Track):
     def __init__(
         self,
         bbox : np.ndarray,
-        id_  : int | None = None,
-        state: TrackState = TrackState.NEW,
+        id_  : int             = None,
+        state: core.TrackState = core.TrackState.NEW,
     ):
         super().__init__(
             id_        = id_,
@@ -169,9 +166,9 @@ class KalmanBoxTrack(base.Track):
     def update(
         self,
         frame_id  : int,
+        class_id  : int,
         bbox      : np.ndarray,
         confidence: float,
-        classlabel: int | None  = None,
         timestamp : int | float = timer(),
         *args, **kwargs
     ):
@@ -185,16 +182,16 @@ class KalmanBoxTrack(base.Track):
         self.history.append(
             base.Detection(
                 frame_id   = frame_id,
+                class_id   = class_id,
                 bbox       = bbox,
                 confidence = confidence,
-                classlabel = classlabel,
                 timestamp  = timestamp,
                 *args, **kwargs
             )
         )
         # Update tracking state
-        if self.state == TrackState.NEW and self.hits >= 2:
-            self.state = TrackState.TRACKED
+        if self.state == core.TrackState.NEW and self.hits >= 2:
+            self.state = core.TrackState.TRACKED
     
     def predict(self):
         """Advances the state vector and returns the predicted bounding box
@@ -214,7 +211,7 @@ class KalmanBoxTrack(base.Track):
         """Returns the current bounding box estimate."""
         return convert_x_to_bbox(self.kf.x)
 
-# endregion
+
 
 
 # region Tracker
@@ -240,35 +237,34 @@ class SORT(base.Tracker):
     def update(
         self,
         det_results: torch.Tensor | np.ndarray,
-        # input_size : int | Sequence[int],
-        # image_size : int | Sequence[int],
-        frame_id   : int | None = None,
+        input_size : _size_2_t,
+        image_size : _size_2_t,
+        frame_id   : int = None,
     ):
         """Requires: this method must be called once for each frame even with
         empty detections (use np.empty((0, 5)) for frames without detections).
         
         Args:
-            detections: A :obj:`torch.Tensor` or :obj:`numpy.ndarray` of
-                detections in the format of `[[x1, y1, x2, y2, score, class], ...]`.
-            frame_id  : The frame number. Default is ``None``.
-            input_size: The size of the input image in the format ``[H, W]``.
-            image_size: The size of the original image in the format ``[H, W]``.
+            det_results: A `torch.Tensor` or `numpy.ndarray` of
+                detections in the format of ``[[x1, y1, x2, y2, score, class], ...]``.
+            input_size: The size of the input image in the format [H, W].
+            image_size: The size of the original image in the format [H, W].
+            frame_id: The frame number. Default: ``None``.
         """
         self.frame_count += 1
         # Post-process detections
         det_results   = det_results.cpu().numpy() if isinstance(det_results, torch.Tensor) else det_results
-        scores        = det_results[:,   4] * detections[:, 5]
+        scores        = det_results[:,   4] * det_results[:, 5]
         bboxes        = det_results[:, 0:4]  # [x1, y1, x2, y2]
         classes       = det_results[:,   5]
-        '''
         # Scale the detections
-        input_size    = core.parse_hw(input_size)
-        image_size    = core.parse_hw(image_size)
+        input_size    = types.image_size(input_size)
+        image_size    = types.image_size(image_size)
         inp_h, inp_w  = input_size[0], input_size[1]
         img_h, img_w  = image_size[0], image_size[1]
-        scale         = min(float(img_h) / float(inp_h), float(img_w) / float(inp_w))
-        bboxes       /= scale
-        '''
+        if inp_h != img_h or inp_w != img_w:
+            scale   = min(float(img_h) / float(inp_h), float(img_w) / float(inp_w))
+            bboxes /= scale
         # Filter detection with low confidence score
         dets          = np.concatenate((bboxes, np.expand_dims(scores, axis=-1)), axis=1)
         remain_ids    = scores > self.det_threshold
@@ -296,9 +292,9 @@ class SORT(base.Tracker):
         for m in matched:
             self.tracks[m[1]].update(
                 frame_id   = frame_id or self.frame_count,
+                class_id   = classes[m[0]],
                 bbox       = dets[m[0], 0:4],
                 confidence = dets[m[0],   4],
-                classlabel = classes[m[0]],
             )
         # Create and initialize new tracks for unmatched detections
         for i in unmatched_dets:
@@ -319,5 +315,3 @@ class SORT(base.Tracker):
         if len(ret) > 0:
             return np.concatenate(ret)
         return np.empty((0, 5))
-
-# endregion

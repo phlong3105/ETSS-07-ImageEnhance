@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Blueprint Separable Convolution Module.
-
-This module implements blueprint separable convolutional layers.
-"""
-
-from __future__ import annotations
+"""Implements blueprint separable convolutional layers."""
 
 __all__ = [
     "BSConv2dS",
@@ -16,23 +11,35 @@ __all__ = [
 import math
 
 import torch
-from torch import nn
 from torch.nn.common_types import _size_2_t
 
-from mon.nn.modules import normalization
 
+class BSConv2dS(torch.nn.Module):
+    """Blueprint Separable Conv2d from MobileNets paper.
 
-# region Blueprint Separable Convolution
+    Args:
+        in_channels: Number of input channels as ``int``.
+        out_channels: Number of output channels as ``int``.
+        kernel_size: Size of the depthwise kernel as ``int`` or ``tuple[int, int]``.
+        stride: Stride of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        padding: Padding size or mode as ``int``, ``tuple[int, int]``, or ``str``.
+            Default is ``0``.
+        dilation: Dilation of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        bias: Adds bias to depthwise conv if ``True``. Default is ``True``.
+        padding_mode: Padding mode for depthwise conv as ``str``. Default is ``"zeros"``.
+        p: Proportion for mid channels as ``float``. Default is ``0.25``.
+        min_mid_channels: Minimum mid channels as ``int``. Default is ``4``.
+        with_bn: Includes batch norm if ``True``. Default is ``False``.
+        bn_kwargs: Batch norm kwargs as ``dict`` or ``None``.
+            Default is ``None`` (empty dict).
 
-class BSConv2dS(nn.Module):
-    """Unconstrained Blueprint Separable Conv2d adopted from the paper:
-    `"Rethinking Depthwise Separable Convolutions: How Intra-Kernel Correlations
-    Lead to Improved MobileNets" <https://arxiv.org/abs/2003.13549>`__
-    
     References:
-        https://github.com/zeiss-microscopy/BSConv
+        - https://arxiv.org/abs/2003.13549
+        - https://github.com/zeiss-microscopy/BSConv
     """
-    
+
     def __init__(
         self,
         in_channels     : int,
@@ -50,12 +57,12 @@ class BSConv2dS(nn.Module):
         *args, **kwargs
     ):
         super().__init__()
-        assert 0.0 <= p <= 1.0
+        if not 0.0 <= p <= 1.0:
+            raise AssertionError(f"[p] must be in [0.0, 1.0], got {p}.")
         mid_channels = min(in_channels, max(min_mid_channels, math.ceil(p * in_channels)))
-        if bn_kwargs is None:
-            bn_kwargs = {}
-        # Pointwise 1
-        self.pw1 = nn.Conv2d(
+        bn_kwargs    = bn_kwargs or {}
+
+        self.pw1 = torch.nn.Conv2d(
             in_channels  = in_channels,
             out_channels = mid_channels,
             kernel_size  = (1, 1),
@@ -63,15 +70,13 @@ class BSConv2dS(nn.Module):
             padding      = 0,
             dilation     = 1,
             groups       = 1,
-            bias         = False,
+            bias         = False
         )
-        # Batchnorm
-        if with_bn:
-            self.bn1 = normalization.BatchNorm2d(num_features=mid_channels, **bn_kwargs)
-        else:
-            self.bn1 = None
-        # Pointwise 2
-        self.pw2 = nn.Conv2d(
+        self.bn1 = (
+            torch.nn.BatchNorm2d(num_features=mid_channels, **bn_kwargs)
+            if with_bn else None
+        )
+        self.pw2 = torch.nn.Conv2d(
             in_channels  = mid_channels,
             out_channels = out_channels,
             kernel_size  = (1, 1),
@@ -79,15 +84,13 @@ class BSConv2dS(nn.Module):
             padding      = 0,
             dilation     = 1,
             groups       = 1,
-            bias         = False,
+            bias         = False
         )
-        # Batchnorm
-        if with_bn:
-            self.bn2 = normalization.BatchNorm2d(num_features=out_channels, **bn_kwargs)
-        else:
-            self.bn2 = None
-        # Depthwise
-        self.dw = nn.Conv2d(
+        self.bn2 = (
+            torch.nn.BatchNorm2d(num_features=out_channels, **bn_kwargs)
+            if with_bn else None
+        )
+        self.dw = torch.nn.Conv2d(
             in_channels  = out_channels,
             out_channels = out_channels,
             kernel_size  = kernel_size,
@@ -96,12 +99,19 @@ class BSConv2dS(nn.Module):
             dilation     = dilation,
             groups       = out_channels,
             bias         = bias,
-            padding_mode = padding_mode,
+            padding_mode = padding_mode
         )
-    
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        y = self.pw1(x)
+        """Applies blueprint separable convolution.
+
+        Args:
+            input: Input tensor as ``torch.Tensor`` with shape [B, C_in, H, W].
+
+        Returns:
+            Output tensor as ``torch.Tensor`` with shape [B, C_out, H_out, W_out].
+        """
+        y = self.pw1(input)
         if self.bn1:
             y = self.bn1(y)
         y = self.pw2(y)
@@ -109,23 +119,43 @@ class BSConv2dS(nn.Module):
             y = self.bn2(y)
         y = self.dw(y)
         return y
-    
-    def regularization_loss(self):
+
+    def regularization_loss(self) -> torch.Tensor:
+        """Computes regularization loss for pw1 weights.
+
+        Returns:
+            Frobenius norm of weight correlation matrix deviation as ``torch.Tensor``.
+        """
         w   = self.pw1.weight[:, :, 0, 0]
-        wwt = torch.mm(w, torch.transpose(w, 0, 1))
+        wwt = torch.mm(w, w.transpose(0, 1))
         i   = torch.eye(wwt.shape[0], device=wwt.device)
         return torch.norm(wwt - i, p="fro")
 
 
-class BSConv2dU(nn.Module):
-    """Unconstrained Blueprint Separable Conv2d adopted from the paper:
-    `"Rethinking Depthwise Separable Convolutions: How Intra-Kernel Correlations
-    Lead to Improved MobileNets" <https://arxiv.org/abs/2003.13549>`__
-    
+class BSConv2dU(torch.nn.Module):
+    """Unconstrained Blueprint Separable Conv2d from MobileNets.
+
+    Args:
+        in_channels: Number of input channels as ``int``.
+        out_channels: Number of output channels as ``int``.
+        kernel_size: Size of the depthwise kernel as ``int`` or ``tuple[int, int]``.
+        stride: Stride of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        padding: Padding size or mode as ``int``, ``tuple[int, int]``, or ``str``.
+            Default is ``0``.
+        dilation: Dilation of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        bias: Adds bias to depthwise conv if ``True``. Default is ``True``.
+        padding_mode: Padding mode for depthwise conv as ``str``. Default is ``"zeros"``.
+        with_bn: Includes batch norm if ``True``. Default is ``False``.
+        bn_kwargs: Batch norm kwargs as ``dict`` or ``None``.
+            Default is ``None`` (empty dict).
+
     References:
-        https://github.com/zeiss-microscopy/BSConv
+        - https://arxiv.org/abs/2003.13549
+        - https://github.com/zeiss-microscopy/BSConv
     """
-    
+
     def __init__(
         self,
         in_channels : int,
@@ -141,10 +171,9 @@ class BSConv2dU(nn.Module):
         *args, **kwargs
     ):
         super().__init__()
-        if bn_kwargs is None:
-            bn_kwargs = {}
-        # Pointwise
-        self.pw = nn.Conv2d(
+        bn_kwargs = bn_kwargs or {}
+
+        self.pw = torch.nn.Conv2d(
             in_channels  = in_channels,
             out_channels = out_channels,
             kernel_size  = (1, 1),
@@ -152,15 +181,13 @@ class BSConv2dU(nn.Module):
             padding      = 0,
             dilation     = 1,
             groups       = 1,
-            bias         = False,
+            bias         = False
         )
-        # Batchnorm
-        if with_bn:
-            self.bn = normalization.BatchNorm2d(num_features=out_channels, **bn_kwargs)
-        else:
-            self.bn = None
-        # Depthwise
-        self.dw = nn.Conv2d(
+        self.bn = (
+            torch.nn.BatchNorm2d(num_features=out_channels, **bn_kwargs)
+            if with_bn else None
+        )
+        self.dw = torch.nn.Conv2d(
             in_channels  = out_channels,
             out_channels = out_channels,
             kernel_size  = kernel_size,
@@ -169,15 +196,20 @@ class BSConv2dU(nn.Module):
             dilation     = dilation,
             groups       = out_channels,
             bias         = bias,
-            padding_mode = padding_mode,
+            padding_mode = padding_mode
         )
-    
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        y = self.pw(x)
+        """Applies blueprint separable convolution.
+
+        Args:
+            input: Input tensor as ``torch.Tensor`` with shape [B, C_in, H, W].
+
+        Returns:
+            Output tensor as ``torch.Tensor`` with shape [B, C_out, H_out, W_out].
+        """
+        y = self.pw(input)
         if self.bn:
             y = self.bn(y)
         y = self.dw(y)
         return y
-
-# endregion

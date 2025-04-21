@@ -16,11 +16,15 @@ python -W ignore main.py \
     --root "${current_dir}" \
     --task "llie" \
     --mode "predict" \
-    --data "lol_v1" \
+    --data "dicm, fusion, lime, mef, npe, vv, lol_v1, lol_v2_real, lol_v2_synthetic, fivek, sice, sice_grad, sice_mix, sid_sony, darkcityscapes, darkface, exdark, loli_street_test, loli_street_val, nightcity" \
+    --benchmark \
+    --save-image \
+    --save-debug \
+    --exist-ok \
     --verbose \
     "$@"
 
+# --data "dicm, fusion, lime, mef, npe, vv, lol_v1, lol_v2_real, lol_v2_synthetic, fivek, sice, sice_grad, sice_mix, sid_sony, c" \
+
 # Done
 cd "${current_dir}" || exit
-
-# --data "dicm, fusion, lime, mef, npe, vv, fivek_e, loli_street, lol_v1, lol_v2_real, lol_v2_synthetic, nightcity, sice, sice_grad, sice_mix_v2, sid_sony" \

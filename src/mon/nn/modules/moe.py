@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Mixture of Experts (MoE) Network.
-
-This module implements the Mixture of Experts (MoE) network.
-"""
-
-from __future__ import annotations
+"""Implements Mixture of Experts (MoE) network."""
 
 __all__ = [
     "LayeredFeatureAggregation",
@@ -15,63 +10,73 @@ __all__ = [
 from typing import Sequence
 
 import torch
-from torch import nn
 from torch.nn.common_types import _size_2_t
 
 from mon import core
 
 
-# region Layer
+# ----- Layer -----
+class LayeredFeatureAggregation(torch.nn.Module):
+    """Layered Feature Aggregation (LFA) fuses decoder layer features.
 
-class LayeredFeatureAggregation(nn.Module):
-    """Layered Feature Aggregation (LFA) Layer fuses features from different
-    decoder layers to more robustly and accurately generate the final prediction
-    result.
+    Args:
+        in_channels: List of input channel counts for each feature as ``list[int]``.
+        out_channels: Number of output channels as ``int``.
+        size: Target size for upsampling as ``int`` or ``tuple[int, int]``.
+            Default is ``None`` (no resizing).
     """
-    
+
     def __init__(
         self,
         in_channels : list[int],
         out_channels: int,
-        size        : _size_2_t = None,
+        size        : _size_2_t = None
     ):
         super().__init__()
+        from mon import vision
+        
         self.in_channels  = core.to_int_list(in_channels)
         self.out_channels = out_channels
         self.num_experts  = len(self.in_channels)
-        # Resize & Linear
-        if size is not None:
-            self.size    = core.get_image_size(size)
-            self.resize  = nn.Upsample(size=self.size, mode="bilinear", align_corners=False)
-            linears      = []
-            for in_c in self.in_channels:
-                linears.append(nn.Conv2d(in_c, self.out_channels, 1))
-            self.linears = nn.ModuleList(linears)
+
+        if not self.num_experts:
+            raise ValueError("[in_channels] must not be empty")
+
+        if size:
+            self.size    = vision.image_size(size)
+            self.resize  = torch.nn.Upsample(size=self.size, mode="bilinear", align_corners=False)
+            self.linears = torch.nn.ModuleList([
+                torch.nn.Conv2d(in_c, self.out_channels, 1) for in_c in self.in_channels
+            ])
         else:
             self.size    = None
             self.resize  = None
             self.linears = None
-        # Conv & softmax
-        self.conv    = nn.Conv2d(self.out_channels * self.num_experts, self.out_channels, 1)
-        self.softmax = nn.Softmax(dim=1)
-    
-    def forward(self, input: Sequence[torch.Tensor]) -> torch.Tensor:
-        if len(input) != self.num_experts:
-            raise ValueError(f"Expected {self.num_experts} input tensors, "
-                             f"but got {len(input)}")
-        if self.linears:
-            r = []
-            for i, inp in enumerate(input):
-                if self.resize is not None:
-                    r.append(self.linears[i](self.resize(inp)))
-                else:
-                    r.append(self.linears[i](inp))
-        else:
-            r = input
-        o_s = torch.cat(r, dim=1)
-        w   = self.softmax(self.conv(o_s))
-        o_w = torch.stack([r[i] * w[:, i] for i, _ in enumerate(r)], dim=1)
-        o   = torch.sum(o_w, dim=1)
-        return o
 
-# endregion
+        self.conv    = torch.nn.Conv2d(self.out_channels * self.num_experts, self.out_channels, 1)
+        self.softmax = torch.nn.Softmax(dim=1)
+
+    def forward(self, input: Sequence[torch.Tensor]) -> torch.Tensor:
+        """Aggregates layered features with attention.
+
+        Args:
+            input: Sequence of feature tensors as ``Sequence[torch.Tensor]`` with
+                shapes [B, C_i, H, W].
+
+        Returns:
+            Aggregated feature tensor as ``torch.Tensor`` with shape [B, C_out, H, W].
+
+        Raises:
+            ValueError: If number of input tensors mismatches ``num_experts``.
+        """
+        if len(input) != self.num_experts:
+            raise ValueError(f"Expected {self.num_experts} input tensors, got {len(input)}.")
+
+        r = [
+            self.linears[i](self.resize(inp)) if self.resize else self.linears[i](inp) if self.linears else inp
+            for i, inp in enumerate(input)
+        ]
+        o_s = torch.cat(r, dim=1)  # [B, C_out * num_experts, H, W]
+        w   = self.softmax(self.conv(o_s))  # [B, C_out, H, W]
+        o_w = torch.stack([r[i] * w[:, i:i+1] for i in range(len(r))], dim=1)  # [B, num_experts, C_out, H, W]
+        return torch.sum(o_w, dim=1)  # [B, C_out, H, W]

@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Trainer.
-
-This module implements the training procedure for neural networks.
-"""
-
-from __future__ import annotations
+"""Implements training procedure for neural networks."""
 
 __all__ = [
     "Trainer",
@@ -14,73 +9,62 @@ __all__ = [
 ]
 
 import lightning
-from lightning.pytorch.trainer import *
+from lightning.pytorch.trainer import seed_everything
 
 from mon import core
 from mon.nn import strategy
 
-console = core.console
 
-
-# region Trainer
-
+# ----- Trainer -----
 class Trainer(lightning.Trainer):
-    """The trainer class extends the :obj:`lightning.Trainer` with several
-    methods and properties.
-    
+    """Extends lightning.Trainer with custom methods and properties.
+
     Args:
-        log_image_every_n_epochs: Log debugging images every n epochs.
+        log_image_every_n_epochs: Log debug images every n epochs as ``int``.
+            Default is ``0``.
+        *args: Variable length argument list passed to ``lightning.Trainer``.
+        **kwargs: Keyword arguments passed to ``lightning.Trainer``.
     """
     
-    def __init__(
-        self,
-        log_image_every_n_epochs: int = 0,
-        *args, **kwargs
-    ):
+    def __init__(self, log_image_every_n_epochs: int = 0, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.log_image_every_n_epochs = log_image_every_n_epochs
         
     @lightning.Trainer.current_epoch.setter
     def current_epoch(self, current_epoch: int):
+        """Sets the current epoch.
+
+        Args:
+            current_epoch: Epoch number to set as ``int``.
+        """
         self.fit_loop.current_epoch = current_epoch
-    
+
     @lightning.Trainer.global_step.setter
     def global_step(self, global_step: int):
+        """Sets the global step.
+
+        Args:
+            global_step: Step number to set as ``int``.
+        """
         self.fit_loop.global_step = global_step
     
     def _log_device_info(self):
-        if strategy.CUDAAccelerator.is_available():
-            gpu_available = True
-            gpu_type      = " (cuda)"
-        elif strategy.MPSAccelerator.is_available():
-            gpu_available = True
-            gpu_type      = " (mps)"
-        else:
-            gpu_available = False
-            gpu_type      = ""
-        
+        """Logs device availability and usage information."""
+        gpu_available, gpu_type = (
+            (True, " (cuda)") if strategy.CUDAAccelerator.is_available() else
+            (True, " (mps)") if strategy.MPSAccelerator.is_available() else
+            (False, "")
+        )
         gpu_used = isinstance(self.accelerator, (strategy.CUDAAccelerator, strategy.MPSAccelerator))
-        console.log(f"GPU available: {gpu_available}{gpu_type}, "
-                    f"used: {gpu_used}.")
-        
-        num_tpu_cores = self.num_devices if isinstance(self.accelerator, strategy.TPUAccelerator) else 0
-        console.log(f"TPU available: {strategy.TPUAccelerator.is_available()}, "
-                    f"using: {num_tpu_cores} TPU cores.")
+        core.console.log(f"GPU available: {gpu_available}{gpu_type}, used: {gpu_used}.")
 
-        # Integrate MPS Accelerator here, once gpu maps to both
         if strategy.CUDAAccelerator.is_available() and not isinstance(self.accelerator, strategy.CUDAAccelerator):
-            console.log(f"GPU available but not used. Set `accelerator` and "
-                        f"`devices` using `Trainer(accelerator='gpu', "
-                        f"devices='{strategy.CUDAAccelerator.auto_device_count()}')`.")
-        
-        if strategy.TPUAccelerator.is_available() and not isinstance(self.accelerator, strategy.TPUAccelerator):
-            console.log(f"TPU available but not used. Set `accelerator` and "
-                        f"`devices` using `Trainer(accelerator='tpu', "
-                        f"devices='{strategy.TPUAccelerator.auto_device_count()}')`.")
-        
+            core.console.log(
+                f"GPU available but not used. Set `accelerator` and `devices` using "
+                f"Trainer(accelerator='gpu', devices={strategy.CUDAAccelerator.auto_device_count()})."
+            )
         if strategy.MPSAccelerator.is_available() and not isinstance(self.accelerator, strategy.MPSAccelerator):
-            console.log(f"MPS available but not used. Set `accelerator` and "
-                        f"`devices` using `Trainer(accelerator='mps', "
-                        f"devices='{strategy.MPSAccelerator.auto_device_count()}')`.")
-
-# endregion
+            core.console.log(
+                f"MPS available but not used. Set `accelerator` and `devices` using "
+                f"Trainer(accelerator='mps', devices={strategy.MPSAccelerator.auto_device_count()})."
+            )

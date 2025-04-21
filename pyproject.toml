@@ -9,7 +9,7 @@
 #
 [tool.poetry]
 name          = "mon"
-version       = "1.5.1"
+version       = "2.6.0"
 description   = "MON covers a wide range of research topics in computer vision, machine learning, and deep learning."
 license       = "MIT"
 authors       = [
@@ -27,13 +27,12 @@ classifiers   = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3 :: Only",
 ]
 packages      = [
-    {include="mon",       from="src"},
-    {include="mon_extra", from="src"},
+    {include="mon", from="src"},
 ]
 include       = [
     ".gitignore",
@@ -57,30 +56,16 @@ include       = [
 exclude       = []
 
 [tool.poetry.dependencies]
-python            = ">=3.11, <3.13"
-depth_anything_v2 = {path="src/mon_extra/vision/depth/depth_anything_v2", develop=true}
-depth_pro         = {path="src/mon_extra/vision/depth/depth_pro"        , develop=true}
-# mobile_sam        = {path="src/mon_extra/vision/segment/mobile_sam"     , develop=true}
-sam               = {path="src/mon_extra/vision/segment/sam"            , develop=true}
-sam2              = {path="src/mon_extra/vision/segment/sam2"           , develop=true}
-ultralytics       = {path="src/mon_extra/vision/ultralytics"            , develop=true}
-yolor             = {path="src/mon_extra/vision/detect/yolor"           , develop=true}
-yolov7            = {path="src/mon_extra/vision/detect/yolov7"          , develop=true}
-yolov9            = {path="src/mon_extra/vision/detect/yolov9"          , develop=true}
-yolox             = {path="src/mon_extra/vision/detect/yolox"           , develop=true}
+python        = ">=3.11, <3.13"
+snntorch      = {path="src/mon/extra/snntorch",     develop=true}
+spikingjelly  = {path="src/mon/extra/spikingjelly", develop=true}
+ultralytics   = {path="src/mon/extra/ultralytics",  develop=true}
 
 [tool.poetry.extras]
 dev = [
-    "depth_anything_v2",
-    "depth_pro",
-    # "mobile_sam",
-    "sam",
-    "sam2",
+    "snntorch",
+    "spikingjelly",
     "ultralytics",
-    "yolor",
-    "yolov7",
-    "yolov9",
-    "yolox",
 ]
 
 [build-system]

@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Depthwise Separable Convolution Module.
-
-This module implements depthwise separable convolutional layers.
-"""
-
-from __future__ import annotations
+"""Implements depthwise separable convolutional layers."""
 
 __all__ = [
     "DSConv2d",
@@ -24,16 +19,27 @@ __all__ = [
 from typing import Any
 
 import torch
-from torch import nn
 from torch.nn.common_types import _size_2_t
 
-from mon.nn.modules import activation
 
+class DepthwiseConv2d(torch.nn.Module):
+    """Depthwise 2D convolution module.
 
-# region Depthwise Separable Convolution
+    Args:
+        in_channels: Number of input channels as ``int``.
+        kernel_size: Size of the convolution kernel as ``int`` or ``tuple[int, int]``.
+        stride: Stride of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        padding: Padding size or mode as ``int``, ``tuple[int, int]``, or ``str``.
+            Default is ``0``.
+        dilation: Dilation of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        bias: Adds bias to convolution if ``True``. Default is ``True``.
+        padding_mode: Padding mode for convolution as ``str``. Default is ``"zeros"``.
+        device: Device for the module as ``Any``. Default is ``None``.
+        dtype: Data type for the module as ``Any``. Default is ``None``.
+    """
 
-class DepthwiseConv2d(nn.Module):
-    
     def __init__(
         self,
         in_channels : int,
@@ -44,10 +50,10 @@ class DepthwiseConv2d(nn.Module):
         bias        : bool = True,
         padding_mode: str  = "zeros",
         device      : Any  = None,
-        dtype       : Any  = None,
+        dtype       : Any  = None
     ):
         super().__init__()
-        self.dw_conv = nn.Conv2d(
+        self.dw_conv = torch.nn.Conv2d(
             in_channels  = in_channels,
             out_channels = in_channels,
             kernel_size  = kernel_size,
@@ -58,16 +64,39 @@ class DepthwiseConv2d(nn.Module):
             bias         = bias,
             padding_mode = padding_mode,
             device       = device,
-            dtype        = dtype,
+            dtype        = dtype
         )
-        
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        y = self.dw_conv(x)
-        return y
+        """Applies depthwise convolution.
+
+        Args:
+            input: Input tensor as ``torch.Tensor`` with shape [B, C_in, H, W].
+
+        Returns:
+            Output tensor as ``torch.Tensor`` with shape [B, C_in, H_out, W_out].
+        """
+        return self.dw_conv(input)
 
 
-class PointwiseConv2d(nn.Module):
+class PointwiseConv2d(torch.nn.Module):
+    """Pointwise 2D convolution module with 1x1 kernel.
+
+    Args:
+        in_channels: Number of input channels as ``int``.
+        out_channels: Number of output channels as ``int``.
+        stride: Stride of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        padding: Padding size or mode as ``int``, ``tuple[int, int]``, or ``str``.
+            Default is ``0``.
+        dilation: Dilation of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        groups: Number of groups in convolution as ``int``. Default is ``1``.
+        bias: Adds bias to convolution if ``True``. Default is ``True``.
+        padding_mode: Padding mode for convolution as ``str``. Default is ``"zeros"``.
+        device: Device for the module as ``Any``. Default is ``None``.
+        dtype: Data type for the module as ``Any``. Default is ``None``.
+    """
     
     def __init__(
         self,
@@ -80,10 +109,10 @@ class PointwiseConv2d(nn.Module):
         bias        : bool = True,
         padding_mode: str  = "zeros",
         device      : Any  = None,
-        dtype       : Any  = None,
+        dtype       : Any  = None
     ):
         super().__init__()
-        self.pw_conv = nn.Conv2d(
+        self.pw_conv = torch.nn.Conv2d(
             in_channels  = in_channels,
             out_channels = out_channels,
             kernel_size  = 1,
@@ -94,17 +123,40 @@ class PointwiseConv2d(nn.Module):
             bias         = bias,
             padding_mode = padding_mode,
             device       = device,
-            dtype        = dtype,
+            dtype        = dtype
         )
     
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        y = self.pw_conv(x)
-        return y
+        """Applies pointwise convolution.
+
+        Args:
+            input: Input tensor as ``torch.Tensor`` with shape [B, C_in, H, W].
+
+        Returns:
+            Output tensor as ``torch.Tensor`` with shape [B, C_out, H_out, W_out].
+        """
+        return self.pw_conv(input)
     
 
-class DepthwiseSeparableConv2d(nn.Module):
-    
+class DepthwiseSeparableConv2d(torch.nn.Module):
+    """Depthwise separable 2D convolution module.
+
+    Args:
+        in_channels: Number of input channels as ``int``.
+        out_channels: Number of output channels as ``int``.
+        kernel_size: Size of the depthwise kernel as ``int`` or ``tuple[int, int]``.
+        stride: Stride of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        padding: Padding size or mode as ``int``, ``tuple[int, int]``, or ``str``.
+            Default is ``0``.
+        dilation: Dilation of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        bias: Adds bias to convolutions if ``True``. Default is ``True``.
+        padding_mode: Padding mode for convolutions as ``str``. Default is ``"zeros"``.
+        device: Device for the module as ``Any``. Default is ``None``.
+        dtype: Data type for the module as ``Any``. Default is ``None``.
+    """
+
     def __init__(
         self,
         in_channels : int,
@@ -116,10 +168,10 @@ class DepthwiseSeparableConv2d(nn.Module):
         bias        : bool = True,
         padding_mode: str  = "zeros",
         device      : Any  = None,
-        dtype       : Any  = None,
+        dtype       : Any  = None
     ):
         super().__init__()
-        self.dw_conv = nn.Conv2d(
+        self.dw_conv = torch.nn.Conv2d(
             in_channels  = in_channels,
             out_channels = in_channels,
             kernel_size  = kernel_size,
@@ -130,27 +182,50 @@ class DepthwiseSeparableConv2d(nn.Module):
             bias         = bias,
             padding_mode = padding_mode,
             device       = device,
-            dtype        = dtype,
+            dtype        = dtype
         )
-        self.pw_conv = nn.Conv2d(
+        self.pw_conv = torch.nn.Conv2d(
             in_channels  = in_channels,
             out_channels = out_channels,
             kernel_size  = 1,
             bias         = bias,
             padding_mode = padding_mode,
             device       = device,
-            dtype        = dtype,
+            dtype        = dtype
         )
-    
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        y = self.dw_conv(x)
-        y = self.pw_conv(y)
-        return y
+        """Applies depthwise then pointwise convolution.
+
+        Args:
+            input: Input tensor as ``torch.Tensor`` with shape [B, C_in, H, W].
+
+        Returns:
+            Output tensor as ``torch.Tensor`` with shape [B, C_out, H_out, W_out].
+        """
+        return self.pw_conv(self.dw_conv(input))
 
 
-class DepthwiseSeparableConvAct2d(nn.Module):
-    
+class DepthwiseSeparableConvAct2d(torch.nn.Module):
+    """Depthwise separable 2D convolution with activation.
+
+    Args:
+        in_channels: Number of input channels as ``int``.
+        out_channels: Number of output channels as ``int``.
+        kernel_size: Size of the depthwise kernel as ``int`` or ``tuple[int, int]``.
+        stride: Stride of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        padding: Padding size or mode as ``int``, ``tuple[int, int]``, or ``str``.
+            Default is ``0``.
+        dilation: Dilation of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        bias: Adds bias to convolutions if ``True``. Default is ``True``.
+        padding_mode: Padding mode for convolutions as ``str``. Default is ``"zeros"``.
+        device: Device for the module as ``Any``. Default is ``None``.
+        dtype: Data type for the module as ``Any``. Default is ``None``.
+        act_layer: Activation layer class as ``torch.nn.Module``. Default is ``torch.nn.ReLU``.
+    """
+
     def __init__(
         self,
         in_channels : int,
@@ -163,7 +238,7 @@ class DepthwiseSeparableConvAct2d(nn.Module):
         padding_mode: str       = "zeros",
         device      : Any       = None,
         dtype       : Any       = None,
-        act_layer   : nn.Module = nn.ReLU,
+        act_layer   : torch.nn.Module = torch.nn.ReLU
     ):
         super().__init__()
         self.ds_conv = DepthwiseSeparableConv2d(
@@ -176,19 +251,42 @@ class DepthwiseSeparableConvAct2d(nn.Module):
             bias         = bias,
             padding_mode = padding_mode,
             device       = device,
-            dtype        = dtype,
+            dtype        = dtype
         )
         self.act = act_layer()
-    
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        y = self.ds_conv(x)
-        y = self.act(y)
-        return y
+        """Applies depthwise separable convolution and activation.
+
+        Args:
+            input: Input tensor as ``torch.Tensor`` with shape [B, C_in, H, W].
+
+        Returns:
+            Output tensor as ``torch.Tensor`` with shape [B, C_out, H_out, W_out]
+            after activation.
+        """
+        return self.act(self.ds_conv(input))
 
 
-class DepthwiseSeparableConv2dReLU(nn.Module):
-    
+class DepthwiseSeparableConv2dReLU(torch.nn.Module):
+    """Depthwise separable 2D convolution with ReLU activation.
+
+    Args:
+        in_channels: Number of input channels as ``int``.
+        out_channels: Number of output channels as ``int``.
+        kernel_size: Size of the depthwise kernel as ``int`` or ``tuple[int, int]``.
+        stride: Stride of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        padding: Padding size or mode as ``int``, ``tuple[int, int]``, or ``str``.
+            Default is ``0``.
+        dilation: Dilation of the convolution as ``int`` or ``tuple[int, int]``.
+            Default is ``1``.
+        bias: Adds bias to convolutions if ``True``. Default is ``True``.
+        padding_mode: Padding mode for convolutions as ``str``. Default is ``"zeros"``.
+        device: Device for the module as ``Any``. Default is ``None``.
+        dtype: Data type for the module as ``Any``. Default is ``None``.
+    """
+
     def __init__(
         self,
         in_channels : int,
@@ -200,7 +298,7 @@ class DepthwiseSeparableConv2dReLU(nn.Module):
         bias        : bool      = True,
         padding_mode: str       = "zeros",
         device      : Any       = None,
-        dtype       : Any       = None,
+        dtype       : Any       = None
     ):
         super().__init__()
         self.ds_conv = DepthwiseSeparableConv2d(
@@ -213,15 +311,20 @@ class DepthwiseSeparableConv2dReLU(nn.Module):
             bias         = bias,
             padding_mode = padding_mode,
             device       = device,
-            dtype        = dtype,
+            dtype        = dtype
         )
-        self.act = activation.ReLU(inplace=True)
-    
+        self.act = torch.nn.ReLU(inplace=True)
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        x = input
-        y = self.ds_conv(x)
-        y = self.act(y)
-        return y
+        """Applies depthwise separable convolution and ReLU.
+
+        Args:
+            input: Input tensor as ``torch.Tensor`` with shape [B, C_in, H, W].
+
+        Returns:
+            Output tensor as ``torch.Tensor`` with shape [B, C_out, H_out, W_out] after ReLU.
+        """
+        return self.act(self.ds_conv(input))
 
 
 DWConv2d     = DepthwiseConv2d
@@ -229,5 +332,3 @@ PWConv2d     = PointwiseConv2d
 DSConv2d     = DepthwiseSeparableConv2d
 DSConvAct2d  = DepthwiseSeparableConvAct2d
 DSConv2dReLU = DepthwiseSeparableConv2dReLU
-
-# endregion

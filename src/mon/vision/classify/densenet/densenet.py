@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""DenseNet.
-
-This module implements DenseNet models.
-"""
-
-from __future__ import annotations
+"""Implements DenseNet models."""
 
 __all__ = [
     "DenseNet121",
@@ -16,50 +11,66 @@ __all__ = [
 ]
 
 from abc import ABC
-from typing import Any
 
 from torchvision.models import (
     densenet121, densenet161, densenet169, densenet201,
 )
 
 from mon import core, nn
-from mon.globals import MODELS, Scheme, ZOO_DIR
+from mon.constants import MLType, MODELS, ZOO_DIR
 from mon.vision.classify import base
 
-console      = core.console
 current_file = core.Path(__file__).absolute()
 current_dir  = current_file.parents[0]
 
 
-# region Model
-
+# ----- Model -----
 class DenseNet(nn.ExtraModel, base.ImageClassificationModel, ABC):
-    """DenseNet models from the paper: "Densely Connected Convolutional
-    Networks".
-    
+    """DenseNet model for image classification.
+
     References:
-        https://arxiv.org/pdf/1608.06993.pdf
+        - https://arxiv.org/pdf/1608.06993.pdf
     """
     
-    model_dir: core.Path    = current_dir
     arch     : str          = "densenet"
-    schemes  : list[Scheme] = [Scheme.SUPERVISED]
+    mltypes  : list[MLType] = [MLType.SUPERVISED]
+    model_dir: core.Path    = current_dir
     zoo      : dict         = {}
     
+    # ----- Initialize -----
     def init_weights(self, m: nn.Module):
+        """Initializes weights for the model.
+    
+        Args:
+            m: ``nn.Module`` to initialize weights for.
+        """
         pass
     
+    # ----- Forward Pass -----
     def forward(self, datapoint: dict, *args, **kwargs) -> dict:
-        self.assert_datapoint(datapoint)
-        x = datapoint.get("image")
+        """Performs forward pass on the model.
+    
+        Args:
+            datapoint: ``dict`` with image data.
+    
+        Returns:
+            ``dict`` of predictions with ``"logits"`` keys.
+        """
+        x = datapoint["image"]
         y = self.model(x)
         return {"logits": y}
     
 
 @MODELS.register(name="densenet121", arch="densenet")
 class DenseNet121(DenseNet):
+    """DenseNet-121 model for image classification.
+
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
     
-    zoo: dict = {
+    name: str  = "densenet121"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/densenet121-a639ec97.pth",
             "path"       : ZOO_DIR / "vision/classify/densenet/densenet121/imagenet1k_v1/densenet121_imagenet1k_v1.pth",
@@ -67,30 +78,14 @@ class DenseNet121(DenseNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "densenet121",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = densenet121(num_classes=num_classes)
         
-        self.model = densenet121(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -99,8 +94,14 @@ class DenseNet121(DenseNet):
 
 @MODELS.register(name="densenet161", arch="densenet")
 class DenseNet161(DenseNet):
+    """DenseNet-161 model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "densenet161"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/densenet161-8d451a50.pth",
             "path"       : ZOO_DIR / "vision/classify/densenet/densenet161/imagenet1k_v1/densenet161_imagenet1k_v1.pth",
@@ -108,30 +109,14 @@ class DenseNet161(DenseNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "densenet161",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = densenet161(num_classes=num_classes)
         
-        self.model = densenet161(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -140,8 +125,14 @@ class DenseNet161(DenseNet):
 
 @MODELS.register(name="densenet169", arch="densenet")
 class DenseNet169(DenseNet):
+    """DenseNet-169 model for image classification.
+
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
     
-    zoo: dict = {
+    name: str  = "densenet169"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/densenet169-b2777c0a.pth",
             "path"       : ZOO_DIR / "vision/classify/densenet/densenet169/imagenet1k_v1/densenet169_imagenet1k_v1.pth",
@@ -150,30 +141,14 @@ class DenseNet169(DenseNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "densenet169",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = densenet169(num_classes=num_classes)
         
-        self.model = densenet169(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -182,8 +157,14 @@ class DenseNet169(DenseNet):
 
 @MODELS.register(name="densenet201", arch="densenet")
 class DenseNet201(DenseNet):
+    """DenseNet-201 model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "densenet201"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/densenet201-c1103571.pth",
             "path"       : ZOO_DIR / "vision/classify/densenet/densenet201/imagenet1k_v1/densenet201_imagenet1k_v1.pth",
@@ -191,33 +172,15 @@ class DenseNet201(DenseNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "densenet201",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = densenet201(num_classes=num_classes)
         
-        self.model = densenet201(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
             self.apply(self.init_weights)
- 
-# endregion

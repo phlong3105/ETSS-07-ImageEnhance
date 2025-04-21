@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""EfficientNet.
-
-This module implements EfficientNet models.
-"""
-
-from __future__ import annotations
+"""Implements EfficientNet models."""
 
 __all__ = [
     "EfficientNet_B0",
@@ -23,7 +18,6 @@ __all__ = [
 ]
 
 from abc import ABC
-from typing import Any
 
 from torchvision.models import (
     efficientnet_b0, efficientnet_b1, efficientnet_b2, efficientnet_b3,
@@ -32,43 +26,60 @@ from torchvision.models import (
 )
 
 from mon import core, nn
-from mon.globals import MODELS, Scheme, ZOO_DIR
+from mon.constants import MLType, MODELS, ZOO_DIR
 from mon.vision.classify import base
 
-console      = core.console
 current_file = core.Path(__file__).absolute()
 current_dir  = current_file.parents[0]
 
 
-# region Model
-
+# ----- Model -----
 class EfficientNet(nn.ExtraModel, base.ImageClassificationModel, ABC):
-    """EfficientNet models from the paper: "EfficientNet: Rethinking
-    Model Scaling for Convolutional Neural Networks".
-    
+    """EfficientNet model for image classification.
+
     References:
-        https://arxiv.org/abs/1905.11946
+        - https://arxiv.org/abs/1905.11946
     """
     
-    model_dir: core.Path    = current_dir
     arch     : str          = "efficientnet"
-    schemes  : list[Scheme] = [Scheme.SUPERVISED]
+    mltypes  : list[MLType] = [MLType.SUPERVISED]
+    model_dir: core.Path    = current_dir
     zoo      : dict         = {}
     
+    # ----- Initialize -----
     def init_weights(self, m: nn.Module):
+        """Initializes weights for the model.
+    
+        Args:
+            m: ``nn.Module`` to initialize weights for.
+        """
         pass
     
+    # ----- Forward Pass -----
     def forward(self, datapoint: dict, *args, **kwargs) -> dict:
-        self.assert_datapoint(datapoint)
-        x = datapoint.get("image")
+        """Performs forward pass on the model.
+    
+        Args:
+            datapoint: ``dict`` with image data.
+    
+        Returns:
+            ``dict`` of predictions with ``"logits"`` keys.
+        """
+        x = datapoint["image"]
         y = self.model(x)
         return {"logits": y}
     
 
 @MODELS.register(name="efficientnet_b0", arch="efficientnet")
 class EfficientNet_B0(EfficientNet):
+    """EfficientNet-B0 model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_b0"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b0_rwightman-7f5810bc.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b0/imagenet1k_v1/efficientnet_b0_imagenet1k_v1.pth",
@@ -76,30 +87,14 @@ class EfficientNet_B0(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b0",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b0(num_classes=num_classes)
         
-        self.model = efficientnet_b0(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -108,8 +103,14 @@ class EfficientNet_B0(EfficientNet):
 
 @MODELS.register(name="efficientnet_b1", arch="efficientnet")
 class EfficientNet_B1(EfficientNet):
+    """EfficientNet-B1 model for image classification.
+
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
     
-    zoo: dict = {
+    name: str  = "efficientnet_b1"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b1_rwightman-bac287d4.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b1/imagenet1k_v1/efficientnet_b1_imagenet1k_v1.pth",
@@ -122,30 +123,14 @@ class EfficientNet_B1(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b1",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b1(num_classes=num_classes)
         
-        self.model = efficientnet_b1(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -154,8 +139,14 @@ class EfficientNet_B1(EfficientNet):
 
 @MODELS.register(name="efficientnet_b2", arch="efficientnet")
 class EfficientNet_B2(EfficientNet):
+    """EfficientNet-B2 model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_b2"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b2_rwightman-c35c1473.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b2/imagenet1k_v1/efficientnet_b2_imagenet1k_v1.pth",
@@ -163,30 +154,14 @@ class EfficientNet_B2(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b2",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b2(num_classes=num_classes)
         
-        self.model = efficientnet_b2(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -195,8 +170,14 @@ class EfficientNet_B2(EfficientNet):
 
 @MODELS.register(name="efficientnet_b3", arch="efficientnet")
 class EfficientNet_B3(EfficientNet):
+    """EfficientNet-B3 model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_b3"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b3_rwightman-b3899882.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b3/imagenet1k_v1/efficientnet_b3_imagenet1k_v1.pth",
@@ -204,30 +185,14 @@ class EfficientNet_B3(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b3",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b3(num_classes=num_classes)
         
-        self.model = efficientnet_b3(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -236,8 +201,14 @@ class EfficientNet_B3(EfficientNet):
 
 @MODELS.register(name="efficientnet_b4", arch="efficientnet")
 class EfficientNet_B4(EfficientNet):
+    """EfficientNet-B4 model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_b4"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b4_rwightman-23ab8bcd.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b4/imagenet1k_v1/efficientnet_b4_imagenet1k_v1.pth",
@@ -245,30 +216,14 @@ class EfficientNet_B4(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b4",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b4(num_classes=num_classes)
         
-        self.model = efficientnet_b4(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -277,8 +232,14 @@ class EfficientNet_B4(EfficientNet):
 
 @MODELS.register(name="efficientnet_b5", arch="efficientnet")
 class EfficientNet_B5(EfficientNet):
+    """EfficientNet-B5 model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_b5"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b5_lukemelas-1a07897c.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b5/imagenet1k_v1/efficientnet_b5_imagenet1k_v1.pth",
@@ -286,30 +247,14 @@ class EfficientNet_B5(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b5",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b5(num_classes=num_classes)
         
-        self.model = efficientnet_b5(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -318,8 +263,14 @@ class EfficientNet_B5(EfficientNet):
 
 @MODELS.register(name="efficientnet_b6", arch="efficientnet")
 class EfficientNet_B6(EfficientNet):
+    """EfficientNet-B6 model for image classification.
+
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
     
-    zoo: dict = {
+    name: str  = "efficientnet_b6"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b6_lukemelas-24a108a5.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b6/imagenet1k_v1/efficientnet_b6_imagenet1k_v1.pth",
@@ -327,30 +278,14 @@ class EfficientNet_B6(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b6",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b6(num_classes=num_classes)
         
-        self.model = efficientnet_b6(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -359,8 +294,14 @@ class EfficientNet_B6(EfficientNet):
    
 @MODELS.register(name="efficientnet_b7", arch="efficientnet")
 class EfficientNet_B7(EfficientNet):
+    """EfficientNet-B7 model for image classification.
+
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
     
-    zoo: dict = {
+    name: str  = "efficientnet_b7"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_b7_lukemelas-c5b4e57e.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_b7/imagenet1k_v1/efficientnet_b7_imagenet1k_v1.pth",
@@ -368,30 +309,14 @@ class EfficientNet_B7(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_b7",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_b7(num_classes=num_classes)
         
-        self.model = efficientnet_b7(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -400,8 +325,14 @@ class EfficientNet_B7(EfficientNet):
 
 @MODELS.register(name="efficientnet_v2_s", arch="efficientnet")
 class EfficientNet_V2_S(EfficientNet):
+    """EfficientNet-V2 Small model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_v2_s"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_v2_s-dd5fe13b.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_v2_s/imagenet1k_v1/efficientnet_v2_s_imagenet1k_v1.pth",
@@ -409,30 +340,14 @@ class EfficientNet_V2_S(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_v2_s",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_v2_s(num_classes=num_classes)
         
-        self.model = efficientnet_v2_s(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -441,8 +356,14 @@ class EfficientNet_V2_S(EfficientNet):
 
 @MODELS.register(name="efficientnet_v2_m", arch="efficientnet")
 class EfficientNet_V2_M(EfficientNet):
+    """EfficientNet-V2 Medium model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_v2_m"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_v2_m-dc08266a.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_v2_m/imagenet1k_v1/efficientnet_v2_m_imagenet1k_v1.pth",
@@ -450,30 +371,14 @@ class EfficientNet_V2_M(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_v2_m",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_v2_m(num_classes=num_classes)
         
-        self.model = efficientnet_v2_m(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
@@ -482,8 +387,14 @@ class EfficientNet_V2_M(EfficientNet):
 
 @MODELS.register(name="efficientnet_v2_l", arch="efficientnet")
 class EfficientNet_V2_L(EfficientNet):
+    """EfficientNet-V2 Large model for image classification.
 
-    zoo: dict = {
+    Args:
+        num_classes: Number of output classes. Default is ``1000``.
+    """
+    
+    name: str  = "efficientnet_v2_l"
+    zoo : dict = {
         "imagenet1k_v1": {
             "url"        : "https://download.pytorch.org/models/efficientnet_v2_l-59c71312.pth",
             "path"       : ZOO_DIR / "vision/classify/efficientnet/efficientnet_v2_l/imagenet1k_v1/efficientnet_v2_l_imagenet1k_v1.pth",
@@ -491,33 +402,15 @@ class EfficientNet_V2_L(EfficientNet):
         },
     }
     
-    def __init__(
-        self,
-        name       : str = "efficientnet_v2_l",
-        in_channels: int = 3,
-        num_classes: int = 1000,
-        weights    : Any = None,
-        *args, **kwargs
-    ):
-        super().__init__(
-            name        = name,
-            in_channels = in_channels,
-            num_classes = num_classes,
-            weights     = weights,
-            *args, **kwargs
-        )
+    def __init__(self, num_classes: int = 1000, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        num_classes = self.parse_num_classes(num_classes)
         
-        if isinstance(self.weights, dict):
-            in_channels = self.weights.get("in_channels", in_channels)
-            num_classes = self.weights.get("num_classes", num_classes)
-        self.in_channels  = in_channels or self.in_channels
-        self.out_channels = num_classes or self.out_channels
+        # Network
+        self.model = efficientnet_v2_l(num_classes=num_classes)
         
-        self.model = efficientnet_v2_l(num_classes=self.out_channels)
-        
+        # Load weights
         if self.weights:
             self.load_weights()
         else:
             self.apply(self.init_weights)
-        
-# endregion

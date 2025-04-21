@@ -1,13 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Base Metric Module.
-
-This module implements the base classes for all metrics, and the corresponding
-helper functions.
-"""
-
-from __future__ import annotations
+"""Implements base classes and helpers for all metrics."""
 
 __all__ = [
     "BootStrapper",
@@ -25,59 +19,75 @@ __all__ = [
     "RunningMean",
     "RunningSum",
     "SumMetric",
+    "scale_gt_mean",
 ]
 
 from abc import ABC
 from typing import Literal
 
+import cv2
+import kornia
+import numpy as np
+import torch
 import torchmetrics
+from torchmetrics import (
+    BootStrapper, CatMetric, ClasswiseWrapper, MaxMetric, MeanMetric, MetricCollection,
+    MetricTracker, MinMaxMetric, MinMetric, MultioutputWrapper, MultitaskWrapper,
+    RunningMean, RunningSum, SumMetric,
+)
 
 
-# region Base
-
+# ----- Base Metric -----
 class Metric(torchmetrics.Metric, ABC):
-    """The base class for all loss functions.
+    """Base class for all metrics.
 
     Args:
-        mode: One of: ``'FR'`` or ``'NR'``. Default: ``'FR'``.
-        lower_is_better: Default: ``False``.
+        *args: Arguments passed to ``torchmetrics.Metric``.
+        **kwargs: Keyword arguments passed to ``torchmetrics.Metric``.
+    
+    Attributes:
+        mode: One of ``"FR"`` or ``"NR"``. Default is ``"FR"``.
+        higher_is_better: ``True`` if higher values are better. Default is ``True``.
+    """
+
+    mode            : Literal["FR", "NR"] = "FR"
+    higher_is_better: bool                = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+# ----- GT Mean -----
+def scale_gt_mean(
+    image : torch.Tensor | np.ndarray,
+    target: torch.Tensor | np.ndarray
+) -> torch.Tensor | np.ndarray:
+    """Scales image to match target's mean intensity.
+
+    Args:
+        image: RGB image as ``torch.Tensor`` [B, C, H, W] in [0.0, 1.0] or
+            ``numpy.ndarray`` [H, W, C] in [0, 255].
+        target: Target image of same type as ``image``.
+    
+    Returns:
+        Scaled image matching target's mean.
+    
+    Raises:
+        TypeError: If ``image`` and ``target`` types differ.
+    
+    References:
+        - https://github.com/Fediory/HVI-CIDNet/blob/master/measure.py
     """
     
-    def __init__(
-        self,
-        mode           : Literal["FR", "NR"] = "FR",
-        lower_is_better: bool = False,
-        *args, **kwargs
-    ):
-        super().__init__(*args, **kwargs)
-        self.mode            = mode
-        self.lower_is_better = lower_is_better
-
-# endregion
-
-
-# region Aggregation
-
-MetricCollection = torchmetrics.MetricCollection
-
-CatMetric   = torchmetrics.CatMetric
-MaxMetric   = torchmetrics.MaxMetric
-MeanMetric  = torchmetrics.MeanMetric
-MinMetric   = torchmetrics.MinMetric
-RunningMean = torchmetrics.RunningMean
-RunningSum  = torchmetrics.RunningSum
-SumMetric   = torchmetrics.SumMetric
-
-# endregion
-
-
-# region Wrapper
-
-BootStrapper       = torchmetrics.BootStrapper
-ClasswiseWrapper   = torchmetrics.ClasswiseWrapper
-MetricTracker      = torchmetrics.MetricTracker
-MinMaxMetric       = torchmetrics.MinMaxMetric
-MultioutputWrapper = torchmetrics.MultioutputWrapper
-MultitaskWrapper   = torchmetrics.MultitaskWrapper
-
-# endregion
+    if isinstance(image, torch.Tensor) and isinstance(target, torch.Tensor):
+        mean_image  = kornia.color.rgb_to_grayscale(image).mean()
+        mean_target = kornia.color.rgb_to_grayscale(target).mean()
+        image       = torch.clip(image * (mean_target / mean_image), 0, 1)
+    elif isinstance(image, np.ndarray) and isinstance(target, np.ndarray):
+        mean_image  = cv2.cvtColor(image,  cv2.COLOR_RGB2GRAY).mean()
+        mean_target = cv2.cvtColor(target, cv2.COLOR_RGB2GRAY).mean()
+        image       = np.clip(image * (mean_target / mean_image), 0, 255)
+    else:
+        raise TypeError(f"[image] and [target] must be same type, "
+                        f"got {type(image).__name__} and {type(target).__name__}.")
+    return image

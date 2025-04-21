@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Humps Module.
-
-This module extends :obj:`humps`.
-"""
-
-from __future__ import annotations
+"""Extends ``humps`` module."""
 
 __all__ = [
 	"camelize",
@@ -25,8 +20,14 @@ __all__ = [
 from humps import *
 
 
+# ----- Utils -----
 def snakecase(x: str) -> str:
-	"""Convert a string to snakecase."""
-	x = x.replace(" ", "_")
-	x = x.replace("-", "_")
-	return x
+	"""Converts a string to snake_case by replacing spaces and hyphens with underscores.
+
+	Args:
+		x: Input string to convert.
+
+	Returns:
+		Converted string in ``snake_case``.
+	"""
+	return x.replace(" ", "_").replace("-", "_")

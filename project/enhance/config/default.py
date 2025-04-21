@@ -11,7 +11,7 @@ __all__ = [
     "TASKS",
 ]
 
-from mon.globals import Task
+from mon import Task
 
 # List all tasks that are performed in this project.
 TASKS = [
@@ -22,11 +22,12 @@ TASKS = [
     Task.DERAIN,
     Task.DESNOW,
     Task.INPAINT,
-    Task.LES,
+    Task.NIGHTTIME,
     Task.LLIE,
 	Task.RETOUCH,
     Task.SEGMENT,
 	Task.SR,
+	Task.UIE,
 ]
 
 # List all models that are used in this project.

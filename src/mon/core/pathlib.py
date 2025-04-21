@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Pathlib Module.
-
-This module extends Python :obj:`pathlib` module.
-"""
-
-from __future__ import annotations
+"""Extends Python ``pathlib`` module."""
 
 __all__ = [
     "Path",
@@ -19,20 +14,15 @@ __all__ = [
     "delete_cache",
     "delete_dir",
     "delete_files",
-    "get_ckpt_file",
-    "get_config_file",
-    "get_files",
-    "get_image_file",
-    "get_next_version",
-    "get_relative_path",
-    "get_yaml_file",
     "hash_files",
-    "is_url",
     "mkdirs",
+    "parse_data_dir",
+    "parse_debug_dir",
+    "parse_output_dir",
+    "parse_save_dir",
     "rmdirs",
 ]
 
-import glob
 import os
 import pathlib
 import shutil
@@ -40,447 +30,430 @@ from pathlib import *
 
 import validators
 
-from mon.core import dtype, humps
+from mon.core import humps, type_extensions
 
 
-# region Path
-
+# ----- Path Class -----
 class Path(type(pathlib.Path())):
-    """An extension of :obj:`pathlib.Path` with more functionalities.
+    """Extended ``pathlib.Path`` with additional functionalities.
     
     Notes:
-        Most of the functions here should be properties, but we keep them as
-        methods to be consistent with :obj:`pathlib.Path`.
+        Methods are kept as methods (not properties) for consistency with ``pathlib.Path``.
     """
     
+    # ----- Check Internal Parts -----
     def is_basename(self) -> bool:
-        """Return ``True`` if the current path is a basename of a file.
-        Otherwise, return ``False``.
+        """Checks if the path is a file basename.
+
+        Returns:
+            ``True`` if path matches its basename, ``False`` otherwise.
         """
         return str(self) == self.name
-    
-    def is_bmp_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a ``.bmp`` file. Otherwise,
-        return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".bmp"]
-        )
-    
-    def is_cache_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a cache file. Otherwise,
-        return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".cache"]
-        )
-    
-    def is_ckpt_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a checkpoint file. Otherwise,
-        return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".ckpt"]
-        )
-    
-    def is_config_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is an ``.config`` or ``.cfg``
-        file. Otherwise, return ``False``.
-        """
-        from mon.globals import CONFIG_FILE_FORMATS
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in CONFIG_FILE_FORMATS
-        )
-
-    def is_dir_like(self) -> bool:
-        """Return ``True`` if the path is a correct directory format."""
-        return "" in self.suffix
-    
-    def is_file_like(self) -> bool:
-        """Return ``True`` if the path is a correct file format."""
-        return "." in self.suffix
-    
-    def is_image_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is an image file. Otherwise,
-        return ``False``.
-        """
-        from mon.globals import IMAGE_FILE_FORMATS
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in IMAGE_FILE_FORMATS
-        )
-    
-    def is_json_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a ``.json`` file.
-        Otherwise, return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".json"]
-        )
-    
+     
     def is_name(self) -> bool:
-        """Return ``True`` if the current path is the same as the stem.
-        Otherwise, return ``False``.
-        """
-        return self == self.stem
-    
-    def is_py_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a ``.py`` file.
-        Otherwise, return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".py"]
-        )
-    
-    def is_raw_image_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a raw image file. Otherwise,
-        return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".dng", ".arw"]
-        )
-    
-    def is_stem(self) -> bool:
-        """Return ``True`` if the current path isn't ``None``, and the parent of
-        the path is the current :obj:`dict`, and the path has no extension.
-        Otherwise, return ``False``.
+        """Checks if the path matches its stem.
+
+        Returns:
+            ``True`` if path equals its stem, ``False`` otherwise.
         """
         return str(self) == self.stem
     
-    def is_torch_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a file, and the file
-        extension is one of the following:
-            - ``.pt``
-            - ``.pt.tar``
-            - ``.pth``
-            - ``.pth.tar``
-            - ``.weights``
-            - ``.ckpt``
-            - ``.onnx``
-            - Otherwise, return ``False``.
+    def is_stem(self) -> bool:
+        """Checks if the path matches its stem.
+
+        Returns:
+            ``True`` if path equals its stem, ``False`` otherwise.
         """
-        from mon.globals import TORCH_FILE_FORMATS
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in TORCH_FILE_FORMATS
-        )
-    
-    def is_txt_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a text file. Otherwise,
-        return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".txt"]
-        )
+        return str(self) == self.stem
     
     def is_url(self) -> bool:
-        """Return ``True`` if the current path is a valid URL. Otherwise,
-        return ``False``.
+        """Checks if the path is a valid URL.
+
+        Returns:
+            ``True`` if path is a valid URL, ``False`` otherwise.
         """
         return not isinstance(validators.url(str(self)), validators.ValidationError)
     
     def is_url_or_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the path is a file or a valid URL. Otherwise,
-        return ``False``.
+        """Checks if the path is a file or valid URL.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a file or valid URL, ``False`` otherwise.
         """
-        return (
-            (self.is_file() if exist else True)
-            or not isinstance(validators.url(self), validators.ValidationError)
-        )
+        return ((not exist or self.is_file()) or
+                not isinstance(validators.url(str(self)), validators.ValidationError))
     
-    def is_video_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is a video file. Otherwise,
-        return ``False``.
+    def is_file_like(self) -> bool:
+        """"Checks if the path resembles a file format.
+
+        Returns:
+            ``True`` if path has a suffix, ``False`` otherwise.
         """
-        from mon.globals import VIDEO_FILE_FORMATS
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in VIDEO_FILE_FORMATS.values()
-        )
+        return "." in self.suffix
+    
+    def is_dir_like(self) -> bool:
+        """Checks if the path resembles a directory format.
+
+        Returns:
+            ``True`` if path has no suffix, ``False`` otherwise.
+        """
+        return self.suffix == ""
+    
+    def has_subdir(self, name: str) -> bool:
+        """Checks if the directory has a subdirectory with the given name.
+
+        Args:
+            name: Subdirectory name to check.
+
+        Returns:
+            ``True`` if subdirectory exists, ``False`` otherwise.
+        """
+        return name in [d.name for d in self.subdirs()]
+    
+    # ----- Check Text File -----
+    def is_json_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.json`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a ``.json`` file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() == ".json"
+    
+    def is_txt_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.txt`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a ``.txt`` file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() == ".txt"
+    
+    def is_xml_file(self, exist: bool = True) -> bool:
+        """Checks if the path is an ``.xml`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is an ``.xml`` file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() == ".xml"
+    
+    def is_yaml_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.yaml`` or ``.yml`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a ``.yaml`` or ``.yml`` file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() in [".yaml", ".yml"]
+   
+    # ----- Check Image File -----
+    def is_image_file(self, exist: bool = True) -> bool:
+        """Checks if the path is an image file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is an image file, ``False`` otherwise.
+        """
+        from mon.constants import ImageExtension
+        return (not exist or self.is_file()) and self.suffix.lower() in ImageExtension
+        
+    def is_raw_image_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a raw image file (``.dng`` or ``.arw``).
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a raw image file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() in [".dng", ".arw"]
+    
+    # ----- Check Video File -----
+    def is_video_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a video file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a video file, ``False`` otherwise.
+        """
+        from mon.constants import VideoExtension
+        return (not exist or self.is_file()) and self.suffix.lower() in VideoExtension
     
     def is_video_stream(self) -> bool:
-        """Return ``True`` if the current path is a video stream. Otherwise,
-        return ``False``.
+        """Checks if the path is a video stream.
+
+        Returns:
+            ``True`` if path contains ``rtsp``, ``False`` otherwise.
         """
         return "rtsp" in str(self).lower()
     
-    def is_weights_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is an ``.pt`` or ``.pth`` file.
-        Otherwise, return ``False``.
-        """
-        from mon.globals import WEIGHTS_FILE_FORMATS
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in WEIGHTS_FILE_FORMATS
-        )
-    
-    def is_xml_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is an ``.xml`` file. Otherwise,
-        return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".xml"]
-        )
-    
-    def is_yaml_file(self, exist: bool = True) -> bool:
-        """Return ``True`` if the current path is an ``.yaml`` or ``.yml`` file.
-        Otherwise, return ``False``.
-        """
-        return (
-            (self.is_file() if exist else True)
-            and self.suffix.lower() in [".yaml", ".yml"]
-        )
-    
-    def has_subdir(self, name: str) -> bool:
-        """Return ``True`` if a directory has a subdirectory with the given
-        name.
-        """
-        subdirs = [d.name for d in self.subdirs()]
-        return name in subdirs
-    
-    def subdirs(self, recursive: bool = False) -> list[Path]:
-        """Returns a :obj:`list` of subdirectories' paths inside the current
-        directory.
-        """
-        path = self.parent if self.is_file_like() else self
-        if recursive:
-            paths = list(path.rglob("*"))
-        else:
-            paths = list(path.iterdir())
-        paths = [p for p in paths if p.is_dir()]
-        return paths
-    
-    def files(self, recursive: bool = False) -> list[Path]:
-        """Return a :obj:`list` of files' paths inside the current directory."""
-        path = self.parent if self.is_file_like() else self
-        if recursive:
-            paths = list(path.rglob("*"))
-        else:
-            paths = list(path.iterdir())
-        paths = [p for p in paths if p.is_file()]
-        return paths
-    
-    def ckpt_file(self) -> Path | None:
-        """Return the YAML file with the given path."""
-        return get_ckpt_file(self)
-    
-    def config_file(self) -> Path:
-        """Return the configuration file type with the given path."""
-        return get_config_file(self)
-    
-    def latest_file(self) -> Path | None:
-        """Return the latest file, in other words, the file with the last
-        created time, in a :obj:`dict`.
-        """
-        # If the current path is a file, then look for other files inside the
-        # same directory.
-        files = self.files()
-        if len(files) > 0:
-            return max(files, key=os.path.getctime)
-        return None
-    
-    def image_file(self) -> Path:
-        """Return the image file with the given path."""
-        return get_image_file(self)
-    
-    def relative_path(self, start_part: Path | str) -> Path:
-        """Get the relative path starting from the given :obj:`part`."""
-        return get_relative_path(self, start_part)
-    
-    def yaml_file(self) -> Path:
-        """Return the YAML file with the given path."""
-        return get_yaml_file(self)
-    
-    def copy_to(self, dst: Path | str, replace: bool = True):
-        """Copy a file to a new location.
-        
+    # ----- Check Torch File -----
+    def is_cache_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.cache`` file.
+
         Args:
-            dst: The destination path.
-            replace: If ``True`` replace the existing file at the destination
-                location. Default: ``True``.
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a ``.cache`` file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() == ".cache"
+    
+    def is_ckpt_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.ckpt`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a ``.ckpt`` file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() == ".ckpt"
+    
+    def is_config_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.config`` or ``.cfg`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a config file, ``False`` otherwise.
+        """
+        from mon.constants import ConfigExtension
+        return (not exist or self.is_file()) and self.suffix.lower() in ConfigExtension
+        
+    def is_py_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.py`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a ``.py`` file, ``False`` otherwise.
+        """
+        return (not exist or self.is_file()) and self.suffix.lower() == ".py"
+    
+    def is_torch_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a Torch-compatible file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path has a Torch extension, ``False`` otherwise.
+        """
+        from mon.constants import TorchExtension
+        return (not exist or self.is_file()) and self.suffix.lower() in TorchExtension
+    
+    def is_weights_file(self, exist: bool = True) -> bool:
+        """Checks if the path is a ``.pt`` or ``.pth`` file.
+
+        Args:
+            exist: If ``True``, verifies file exists. Default is ``True``.
+
+        Returns:
+            ``True`` if path is a weights file, ``False`` otherwise.
+        """
+        from mon.constants import WeightExtension
+        return (not exist or self.is_file()) and self.suffix.lower() in WeightExtension
+    
+    # ----- List -----
+    def subdirs(self, recursive: bool = False) -> list["Path"]:
+        """Returns a list of subdirectory paths.
+
+        Args:
+            recursive: If ``True``, includes subdirs recursively. Default is ``False``.
+
+        Returns:
+            List of subdirectory ``Path`` objects.
+        """
+        path = self.parent if self.is_file_like() else self
+        paths = list(path.rglob("*")) if recursive else list(path.iterdir())
+        return [p for p in paths if p.is_dir()]
+    
+    def files(self, recursive: bool = False) -> list["Path"]:
+        """Returns a list of file paths in the directory.
+
+        Args:
+            recursive: If ``True``, includes files in subdirs. Default is ``False``.
+
+        Returns:
+            List of file ``Path`` objects.
+        """
+        path = self.parent if self.is_file_like() else self
+        paths = list(path.rglob("*")) if recursive else list(path.iterdir())
+        return [p for p in paths if p.is_file()]
+    
+    def ckpt_file(self) -> "Path":
+        """Returns the checkpoint file path if found.
+
+        Returns:
+            Checkpoint file ``Path`` or ``None`` if not found.
+        """
+        ckpt_path = self.with_suffix(".ckpt")
+        return ckpt_path if ckpt_path.is_file() else self
+    
+    def config_file(self) -> "Path":
+        """Returns the configuration file path.
+
+        Returns:
+            Configuration file ``Path``.
+        """
+        from mon.constants import ConfigExtension
+        for ext in ConfigExtension.values():
+            for stem in [self.stem, humps.snakecase(self.stem)]:
+                config_path = self.with_name(f"{stem}{ext}")
+                if config_path.is_file():
+                    return config_path
+        return self
+    
+    def latest_file(self) -> "Path":
+        """Returns the latest file based on creation time.
+
+        Returns:
+            Latest file ``Path`` or ``None`` if no files exist.
+        """
+        files = self.files()
+        return max(files, key=os.path.getctime) if files else None
+    
+    def image_file(self) -> "Path":
+        """Returns the image file path.
+
+        Returns:
+            Image file ``Path``.
+        """
+        from mon.constants import ImageExtension
+        for ext in ImageExtension.values():
+            temp = self.with_suffix(ext)
+            if temp.is_file():
+                return temp
+        return self
+    
+    def yaml_file(self) -> "Path":
+        """Returns the YAML file path.
+
+        Returns:
+            YAML file ``Path``.
+        """
+        for ext in [".yaml", ".yml"]:
+            temp = self.with_suffix(ext)
+            if temp.is_file():
+                return temp
+        return self
+    
+    def relative_path(self, start_part: str) -> "Path":
+        """Returns the relative path from a given start part.
+
+        Args:
+            start_part: Starting path or string for relativity.
+
+        Returns:
+            Relative ``Path`` from ``start_part``.
+        """
+        path       = Path(self)
+        start_part = str(start_part)
+        path_str   = str(path)
+        if start_part not in path_str:
+            return path
+        start_idx = path_str.index(start_part)
+        return Path(path_str[start_idx:])
+    
+    # ----- Creation -----
+    def copy_to(self, dst: str, replace: bool = True):
+        """Copies the file to a new location.
+
+        Args:
+            dst: Destination path or string.
+            replace: If ``True``, replaces existing file. Default is ``True``.
+
+        Raises:
+            NotImplementedError: If ``dst`` is a URL.
         """
         dst = Path(dst)
         if dst.is_url():
-            raise NotImplementedError()
+            raise NotImplementedError("[dst] as a URL is not supported.")
         mkdirs(dst, parents=True, exist_ok=True)
         dst = dst / self.name if dst.is_dir_like() else dst
         if replace:
             dst.unlink(missing_ok=True)
         shutil.copyfile(src=str(self), dst=str(dst))
     
-    def replace(self, old: str, new: str, count: int = 1) -> Path:
-        """Return a new path with the old string replaced by the new string."""
+    def replace(self, old: str, new: str, count: int = 1) -> "Path":
+        """Replaces occurrences of a string in the path.
+
+        Args:
+            old: String to replace.
+            new: Replacement string.
+            count: Max number of replacements. Default is ``1``.
+
+        Returns:
+            New ``Path`` with replaced string.
+        """
         return Path(str(self).replace(old, new, count))
-    
-# endregion
 
 
-# region Check
+# ----- Create -----
+def copy_file(src: Path | str, dst: Path | str) -> None:
+    """Copies a file to a new location.
 
-def is_url(url: str) -> bool:
-    """Return ``True`` if the current path is a valid URL. Otherwise, return
-    ``False``.
-	"""
-    return not isinstance(validators.url(str(url)), validators.ValidationError)
-
-# endregion
-
-
-# region Obtainment
-
-def get_ckpt_file(path: Path) -> Path:
-    """Get the ckpt file of an arbitrary extension from the given path."""
-    for ext in [".ckpt"]:
-        temp = path.parent / f"{path.stem}{ext}"
-        if temp.is_yaml_file():
-            return temp
-    return path
-
-
-def get_config_file(path: Path) -> Path:
-    """Get the configuration file of an arbitrary extension from the given path.
-    Most common extensions are: [``.config``, ``.cfg``, ``.json``, ``.yaml``,
-    or ``.yml``].
-    """
-    from mon.globals import CONFIG_FILE_FORMATS
-    for ext in CONFIG_FILE_FORMATS:
-        temp           = path.parent / f"{path.stem}{ext}"
-        temp_snakecase = path.parent / f"{humps.snakecase(path.stem)}{ext}"
-        if temp.is_config_file():
-            return temp
-        if temp_snakecase.is_config_file():
-            return temp_snakecase
-    return path
-
-
-def get_files(regex: str, recursive: bool = False) -> list[Path]:
-    """Get all files matching the given regular expression.
-    
     Args:
-        regex: A file path patterns.
-        recursive: If ``True``, look for file in subdirectories.
-            Default: ``False``.
-        
-    Returns:
-        A :obj:`list` of unique file paths.
+        src: Path to the source file.
+        dst: Path to the destination.
     """
-    paths = []
-    for path in glob.glob(regex, recursive=recursive):
-        path = Path(path)
-        if path.is_file():
-            paths.append(path)
-    return dtype.unique(paths)
+    src = Path(src)
+    dst = Path(dst)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dst)
 
 
-def get_image_file(path: Path) -> Path:
-    """Get the image of arbitrary extension from the given path."""
-    from mon.globals import IMAGE_FILE_FORMATS
-    for ext in IMAGE_FILE_FORMATS:
-        temp = path.parent / f"{path.stem}{ext}"
-        if temp.is_image_file():
-            return temp
-    return path
-
-
-def get_next_version(path: Path | str, prefix: str = None) -> int:
-    """Get the next version number of items in a directory.
-    
-    Args:
-        path: The directory path containing files.
-        prefix: The file prefix. Default: ``None``.
-    """
-    path  = Path(path)
-    files = list(path.iterdir())
-    existing_versions = []
-    for f in files:
-        name = f.stem
-        if (
-            name.startswith("version-")
-            or name.startswith("exp-")
-            or (isinstance(prefix, str) and name.startswith(prefix + "-"))
-        ):
-            ver = name.split("-")[-1].replace("/", "")
-            existing_versions.append(int(ver))
-    
-    if len(existing_versions) == 0:
-        return 0
-    return max(existing_versions) + 1
-
-
-def get_relative_path(path: Path | str, start_part: Path | str) -> Path:
-    """Get the relative path starting from the given :obj:`part`.
-    
-    Args:
-        path: The path to the file.
-        start_part: The starting part of the relative path.
-    """
-    path       = Path(path)
-    start_part = str(start_part)
-    if start_part in [None, "None", "", "."] or start_part not in str(path):
-        return path
-    return Path(*path.parts[path.parts.index(start_part):])
-    
-
-def get_yaml_file(path: Path) -> Path:
-    """Get the YAML file of an arbitrary extension from the given path."""
-    for ext in [".yaml", ".yml"]:
-        temp = path.parent / f"{path.stem}{ext}"
-        if temp.is_yaml_file():
-            return temp
-    return path
-
-
+# ----- Read -----
 def hash_files(paths: list[Path | str]) -> int:
-    """Return the total hash value of all the files (if it has one). Hash
-    values are integers (in bytes) of all files.
+    """Calculates the total hash value of files based on their sizes.
+
+    Args:
+        paths: List of file paths to hash.
+
+    Returns:
+        Integer sum of file sizes in bytes.
     """
-    paths = dtype.to_list(paths)
-    paths = [Path(f) for f in paths if f]
+    paths = [Path(f) for f in type_extensions.to_list(paths) if f]
     return sum(f.stat().st_size for f in paths if f.is_file())
 
-# endregion
 
-
-# region Creation
-
-def copy_file(src: Path | str, dst: Path | str):
-    """Copy a file to a new location.
-    
-    Args:
-        src: The path to the original file.
-        dst: The destination path.
-    """
-    Path(dst).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src=str(src), dst=str(dst))
-
-# endregion
-
-
-# region Alternation
-
+# ----- Delete -----
 def delete_cache(path: Path | str, recursive: bool = True):
-    r"""Clears cache files in a directory and subdirectories.
-    
+    """Clears cache files in a directory and optionally its subdirs.
+
     Args:
-        path: The directory path containing the cache files.
-        recursive: If ``True``, recursively look for cache files in
-            subdirectories. Default: ``True``.
+        path: Directory path containing cache files.
+        recursive: If ``True``, searches subdirs. Default is ``True``.
     """
     delete_files(path=path, regex=".cache", recursive=recursive)
 
 
 def delete_dir(paths: Path | str | list[Path | str]):
-    paths = dtype.to_list(paths)
-    paths = dtype.unique(paths)
+    """Deletes directories and their contents.
+
+    Args:
+        paths: Single path or list of directory paths.
+    """
+    paths = type_extensions.unique(type_extensions.to_list(paths))
     for p in paths:
         p = Path(p)
         if p.exists():
@@ -493,29 +466,24 @@ def delete_files(
     regex    : str  = None,
     recursive: bool = False
 ):
-    """Delete all files matching the given regular expression.
-    
+    """Deletes files matching a pattern in a directory.
+
     Args:
-        path: A path to a directory to search for the files to delete.
-        regex: A file path patterns. Default: ``None``.
-        recursive: If ``True``, look for file in subdirectories.
-            Default: ``False``.
+        path: Directory path to search for files.
+        regex: File path pattern. Default is ``None`` (deletes ``path`` if file).
+        recursive: If ``True``, searches subdirs. Default is ``False``.
     """
     path = Path(path)
     if regex:
-        if not path.is_dir():
-            path = path.parent
-        if recursive:
-            files = list(path.rglob(*{regex}))
-        else:
-            files = list(path.glob(regex))
+        path  = path.parent if not path.is_dir() else path
+        files = list(path.rglob(regex)) if recursive else list(path.glob(regex))
     else:
         files = [path]
-    try:
-        for f in files:
+    for f in files:
+        try:
             f.unlink()
-    except Exception as err:
-        print(f"Cannot delete files: {err}.")
+        except Exception as err:
+            print(f"Cannot delete file: [err].")
 
 
 def mkdirs(
@@ -525,62 +493,140 @@ def mkdirs(
     exist_ok: bool = True,
     replace : bool = False,
 ):
-    """Create a new directory at this given path. If mode is given, it is
-    combined with the process' umask value to determine the file mode and access
-    flags. If the path already exists, ``FileExistsError`` is raised.
-    
-    Args:
-        paths: A :obj:`list` of directories' absolute paths.
-        mode: If given, it is combined with the process' umask value to
-            determine the file mode and access flags.
-        parents:
-            - If ``True`` (the default), any missing parents of this path are
-              created as needed; they're created with the default permissions
-              without taking mode into account (mimicking the POSIX mkdir -p
-              command).
-            - If ``False``, a missing parent raises ``FileNotFoundError``.
-        exist_ok:
-            - If ``True`` (the default), ``FileExistsError`` exceptions will be
-              ignored (same behavior as the POSIX mkdir -p command), but only
-            if the last path component isn't an existing non-directory file.
-            - If ``False``, ``FileExistsError`` is raised if the target
-              directory already exists.
-        replace: If ``True``, delete existing directories and recreate.
-            Default: ``False``.
-    """
-    paths = dtype.to_list(paths)
-    paths = dtype.unique(paths)
-    try:
-        for p in paths:
-            p = Path(p)
-            if p.is_url():
-                continue
-            p = p.parent if p.is_file_like() else p
-            if replace:
-                delete_files(path=p, regex="*")
-                p.rmdir()
-            p.mkdir(mode=mode, parents=parents, exist_ok=exist_ok)
-    except Exception as err:
-        print(f"Cannot create directory: {err}.")
+    """Creates directories with specified options.
 
-
-def rmdirs(paths: Path | str | list[pathlib.Path | str]):
-    """Delete directories.
-    
     Args:
-        paths: A :obj:`list` of directories' absolute paths.
+        paths: Single path or list of directory paths.
+        mode: File mode with umask. Default is ``0o777``.
+        parents: If ``True``, creates parents. Default is ``True``.
+        exist_ok: If ``True``, ignores existing dirs. Default is ``True``.
+        replace: If ``True``, deletes and recreates dirs. Default is ``False``.
     """
-    paths = dtype.to_list(paths)
-    paths = dtype.unique(paths)
-    try:
-        for p in paths:
-            p = Path(p)
-            if p.is_url():
-                continue
-            p = p.parent if p.is_file_like() else p
+    paths = type_extensions.unique(type_extensions.to_list(paths))
+    for p in paths:
+        p = Path(p)
+        if p.is_url():
+            continue
+        p = p.parent if p.is_file_like() else p
+        if replace and p.exists():
             delete_files(path=p, regex="*")
             p.rmdir()
-    except Exception as err:
-        print(f"Cannot delete directory: {err}.")
+        p.mkdir(mode=mode, parents=parents, exist_ok=exist_ok)
 
-# endregion
+
+def rmdirs(paths: Path | str | list[Path | str]):
+    """Deletes directories and their contents.
+
+    Args:
+        paths: Single path or list of directory paths.
+    """
+    paths = type_extensions.unique(type_extensions.to_list(paths))
+    for p in paths:
+        p = Path(p)
+        if p.is_url():
+            continue
+        if p.is_file_like():
+            p = p.parent
+        delete_files(path=p, regex="*")
+        try:
+            p.rmdir()
+        except Exception as err:
+            print(f"Cannot delete directory: [err].")
+
+
+# ----- Convert -----
+def parse_data_dir(root: str | pathlib.Path, data_dir: str | pathlib.Path) -> str | pathlib.Path:
+    """Parses the absolute data directory path from given components.
+
+    Args:
+        root: Root directory.
+        data_dir: Data directory.
+
+    Returns:
+        Parsed the absolute path of the data directory.
+    """
+    from mon.constants import ROOT_DIR
+    
+    root     = pathlib.Path(root)
+    data_dir = pathlib.Path(data_dir)
+    if not data_dir.is_dir():
+        if (ROOT_DIR / data_dir).is_dir():
+            data_dir = ROOT_DIR / data_dir
+        elif (root / data_dir).is_dir():
+            data_dir = root / data_dir
+    return data_dir
+
+
+def parse_save_dir(
+    root : str | Path,
+    arch : str = None,
+    model: str = None,
+    data : str = None,
+) -> str | pathlib.Path:
+    """Parses a save dir in format: root/arch/model/data.
+
+    Args:
+        root: Project root.
+        arch: Model architecture. Default is ``None``.
+        model: Model name. Default is ``None``.
+        data: Dataset name. Default is ``None``.
+
+    Returns:
+        Parsed save dir path as ``str`` or ``pathlib.Path``.
+    """
+    save_dir = pathlib.Path(root)
+    if arch:
+        save_dir /= arch
+    if model:
+        save_dir /= model
+        if data:
+            save_dir /= data
+    return save_dir
+
+
+def parse_output_dir(
+    root        : str | Path,
+    dirname     : str | Path,
+    file        : str | Path,
+    keep_subdirs: bool = False,
+):
+    """Parses the output directory path from given components.
+    
+    Args:
+        root: Root directory.
+        dirname: Directory name.
+        file: File name.
+        keep_subdirs: If ``True``, keeps subdirectories in the path. Default is ``False``.
+    """
+    root    = Path(root)
+    dirname = Path(dirname)
+    file    = Path(file)
+    if keep_subdirs:
+        rel_path = file.relative_path(dirname)
+        return root / rel_path.parent
+    else:
+        return root / dirname
+
+
+def parse_debug_dir(
+    root        : str | Path,
+    dirname     : str | Path,
+    file        : str | Path,
+    keep_subdirs: bool = False,
+):
+    """Parses the debug directory path from given components.
+    
+    Args:
+        root: Root directory.
+        dirname: Directory name.
+        file: File name.
+        keep_subdirs: If ``True``, keeps subdirectories in the path. Default is ``False``.
+    """
+    root    = Path(root)
+    dirname = Path(dirname)
+    file    = Path(file)
+    if keep_subdirs:
+        rel_path = file.relative_path(dirname)
+        return root / rel_path.parents[1] / f"{rel_path.parent.name}_debug"
+    else:
+        return root / f"{dirname}_debug"

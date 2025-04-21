@@ -1,13 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""BAse Logger.
-
-This module implements the base class for all loggers, and the corresponding
-helper functions.
-"""
-
-from __future__ import annotations
+"""Implements base class and helpers for all loggers."""
 
 __all__ = [
     "CSVLogger",
@@ -18,28 +12,20 @@ __all__ = [
     "WandbLogger",
 ]
 
-from lightning.pytorch import loggers
+from lightning.pytorch.loggers import (
+    CometLogger, CSVLogger, Logger, MLFlowLogger, NeptuneLogger, WandbLogger,
+)
 
-from mon.globals import LOGGERS
+from mon.constants import LOGGERS
 
-# region Logger
-
-Logger        = loggers.Logger
-CSVLogger     = loggers.CSVLogger
-CometLogger   = loggers.CometLogger
-MLFlowLogger  = loggers.MLFlowLogger
-NeptuneLogger = loggers.NeptuneLogger
-WandbLogger   = loggers.WandbLogger
-
-LOGGERS.register(name="csv_logger"    , module=CSVLogger)
-LOGGERS.register(name="comet_logger"  , module=CometLogger)
-LOGGERS.register(name="mlflow_logger" , module=MLFlowLogger)
+# ----- Registering -----
+LOGGERS.register(name="csv",            module=CSVLogger)
+LOGGERS.register(name="csv_logger",     module=CSVLogger)
+LOGGERS.register(name="comet",          module=CometLogger)
+LOGGERS.register(name="comet_logger",   module=CometLogger)
+LOGGERS.register(name="mlflow",         module=MLFlowLogger)
+LOGGERS.register(name="mlflow_logger",  module=MLFlowLogger)
+LOGGERS.register(name="neptune",        module=NeptuneLogger)
 LOGGERS.register(name="neptune_logger", module=NeptuneLogger)
-LOGGERS.register(name="wandb_logger"  , module=WandbLogger)
-LOGGERS.register(name="csv"           , module=CSVLogger)
-LOGGERS.register(name="comet"         , module=CometLogger)
-LOGGERS.register(name="mlflow"        , module=MLFlowLogger)
-LOGGERS.register(name="neptune"       , module=NeptuneLogger)
-LOGGERS.register(name="wandb"         , module=WandbLogger)
-
-# endregion
+LOGGERS.register(name="wandb",          module=WandbLogger)
+LOGGERS.register(name="wandb_logger",   module=WandbLogger)

@@ -1,22 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""The MON package."""
-
-from __future__ import annotations
+"""The MON framework."""
 
 # Order-specific import. DO NOT CHANGE!!!
 import mon.core
-import mon.globals
-import mon.dataset
+import mon.constants
+import mon.datasets
 import mon.nn
 import mon.vision
-import mon.config
 from mon.core import *
-from mon.globals import *
-from mon.dataset import *
+from mon.constants import *
+from mon.datasets import *
 from mon.nn import *
 from mon.vision import *
-from mon.config import *
 
-__version__ = "1.5.1"
+__version__ = "2.6.0"
